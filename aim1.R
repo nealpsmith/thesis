@@ -1,3 +1,4 @@
+rm(list=ls())
 library(plyr) # load before dplyr to avoid conflicts due to masking
 library(dplyr)
 library(tcR)
@@ -14,9 +15,15 @@ library(entropy) # Masks entropy function in tcR
 source("tcR_functions.R") #includes several modifications to tcR
 
 
-# Get file path for output figures and raw data files
-fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
-raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"
+switch(Sys.info()[['user']],
+       nealp = {file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
+       raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+       wayne1 = {file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
+       raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+        stop("I don't recognize your username, type Sys.info() to find out what it is.")
+)
+
+
 
 source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
 
