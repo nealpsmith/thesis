@@ -216,36 +216,31 @@ plt.show()
 # Get all the subgraphs in our graph
 graphs = list(nx.connected_component_subgraphs(G))
 
-# Limit to grpahs with at least 100 nodes
-for n in graphs:
-    if n.number_of_nodes() < 100:
-        graphs.remove(n)
+# List comprehension to get rid of graphs with less than 25 nodes
+graphs[:] = [n for n in graphs if n.number_of_nodes() >= 25]
 
-g_sub = graphs[10]
-#nx.draw(g_sub)
+import matplotlib.backends.backend_pdf
 
-# Try to define communities of CDR3s in each subgraph
-# Create communities using modularity
-communities = community.greedy_modularity_communities(g_sub)
-labels = [list(x) for x in communities]
+pdf = matplotlib.backends.backend_pdf.PdfPages("C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures/networks.100.nodes.modularity.pdf")
+for sub in graphs:
+    # Get communities by modularity
+    communities = community.greedy_modularity_communities(sub)
+    labels = [list(x) for x in communities]
+    
+    # Add community information onto the nodes
+    for n in sub.nodes():
+        group = ([(i + 1) for i, labels in enumerate(labels) if n in labels])
+        sub.node[n]["group"] = str(group) 
+    # get unique groups
+    groups = set(nx.get_node_attributes(sub,'group').values())
+    mapping = dict(zip(sorted(groups),itertools.count()))
+    colors = [mapping[sub.node[n]['group']] for n in sub.nodes()]
+    
+    # Draw the subgraphs
+    draw = nx.draw_random(sub)
+    draw = nx.draw(sub, node_color = colors)
+    # Put graph in pdf
+    pdf.savefig(draw)
+    plt.close()
 
-for n in g_sub.nodes():
-    group = ([(i + 1) for i, labels in enumerate(labels) if n in labels])
-    g_sub.node[n]["group"] = str(group)  
-
-
-# get unique groups
-groups = set(nx.get_node_attributes(g_sub,'group').values())
-mapping = dict(zip(sorted(groups),itertools.count()))
-colors = [mapping[g_sub.node[n]['group']] for n in g_sub.nodes()]
-
-nx.draw_random(g_sub)
-nx.draw(g_sub, node_color = colors)
-
-
-# =============================================================================
-# pos = nx.spring_layout(graphs[10])  # compute graph layout
-# nx.draw_networkx_nodes(graphs[10], pos, node_size=600, node_color=colors)
-# nx.draw_networkx_edges(graphs[10], pos, alpha=0.3)
-# 
-# =============================================================================
+pdf.close()
