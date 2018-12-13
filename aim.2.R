@@ -4,28 +4,31 @@ library(dplyr)
 library(tcR)
 library(ggplot2)
 library(grid)
-library(gridBase)
 library(ggrepel)
 library(magrittr)
 library(stringi)
 library(stringr)
-library(DescTools)
+library(foreach)
+library(doParallel)
+library(data.table)
 source("tcR_functions.R") #includes several modifications to tcR
 
 
 switch(Sys.info()[['user']],
-       nealp = {file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
+       nealp = {fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
        raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
-       wayne1 = {file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
+       wayne1 = {fig.file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
        raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+       ns580 = {fig.file.path <- "~/thesis/figures"
+       raw.file.path <- "~/data/thesis"},
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
 source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
 
 # Load in the data
-load(paste(raw.file.path, "neals.thesis.data/parsed.data.baseline.rda", sep = "/"))
-load(paste(raw.file.path, "neals.thesis.data/enriched.CDR3s.rda", sep = "/"))
+load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
+load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
 
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
 ### Motif analysis ###
@@ -46,10 +49,44 @@ CD154.neg.CDR3s <- lapply(data.parse[grep("neg", names(data.parse))], function(x
   return(x)
 }) %>% do.call(rbind, .)
 
-# Look for nmers in CD154- data
-threemer.neg <- nmer.search(threemer.enriched$nmer, CD154.neg.CDR3s)
-fourmer.neg <- nmer.search(fourmer.enriched$nmer, CD154.neg.CDR3s)
-fivemer.neg <- nmer.search(fivemer.enriched$nmer, CD154.neg.CDR3s)
+# Aggregate all repeated CDR3s, adding up read counts
+CD154.neg.CDR3s <- aggregate(. ~ CDR3.amino.acid.sequence, data = CD154.neg.CDR3s, sum)
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+
+# Use paralell processing to look for the nmers in the CD154- CDR3s
+threemer.neg <- rbindlist(foreach(i = 1:length(threemer.enriched$nmer)) %dopar% {
+  source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+  data = nmer.search(threemer.enriched$nmer[i], CD154.neg.CDR3s, CDR3.col = 1, count.col = 2)
+  data
+})
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+
+fourmer.neg <- rbindlist(foreach(i = 1:length(fourmer.enriched$nmer)) %dopar% {
+  source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+  data = nmer.search(fourmer.enriched$nmer[i], CD154.neg.CDR3s, CDR3.col = 1, count.col = 2)
+  data
+})
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+
+fivemer.neg <- rbindlist(foreach(i = 1:length(fivemer.enriched$nmer)) %dopar% {
+  source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+  data = nmer.search(fivemer.enriched$nmer[i], CD154.neg.CDR3s, CDR3.col = 1, count.col = 2)
+  data
+})
+
+stopCluster(cl)
 
 # Need to get some statistics for negative data
 data.stats <- cloneset.stats(data.parse)
