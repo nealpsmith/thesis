@@ -23,8 +23,13 @@ switch(Sys.info()[['user']],
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-source("~/data/neals_tcr_functions.R")
-
+switch(Sys.info()[['user']],
+       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
+       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
+       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
+       stop("I don't recognize your username, type Sys.info() to find out what it is.")
+)
+source(neals.func.path)
 # Load in the data
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
@@ -71,7 +76,7 @@ cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
 pairs.disc <- foreach(i = 1:length(top.disc.threemers$nmer), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+  source(neals.func.path)
   data = find_pairs_disc(top.disc.threemers$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -96,7 +101,7 @@ registerDoParallel(cl)
 
 # Get pairs for dominant 3mers
 pairs.threemers <- foreach(i = 1:length(top.nmers$threemer$nmer), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+  source(neals.func.path)
   data = find_pairs_cont(top.nmers$threemer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -104,7 +109,7 @@ pairs.threemers <- foreach(i = 1:length(top.nmers$threemer$nmer), .combine = rbi
 
 # Get pairs for dominant 4mers
 pairs.fourmers <- foreach(i = 1:length(top.nmers$fourmer$nmer), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+  source(neals.func.path)
   data = find_pairs_cont(top.nmers$fourmer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -112,7 +117,7 @@ pairs.fourmers <- foreach(i = 1:length(top.nmers$fourmer$nmer), .combine = rbind
 
 # Get pairs for dominant 5mers
 pairs.fivemers <- foreach(i = 1:length(top.nmers$fivemer$nmer), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+  source(neals.func.path)
   data = find_pairs_cont(top.nmers$fivemer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -168,6 +173,29 @@ pairs <- rbind(pairs, self.edges)
 pairs.graph <- graph_from_data_frame(pairs)
 write_graph(pairs.graph, "lev1.motif.graph.gml", format = "gml")
 
+# Make a graph layout to get cluster IDs
+layout_graph <- function(graph) {
+  set.seed(42)
+  # Create a graph from the dataframe
+  gg <- graph %>%
+    graph_from_data_frame %>%
+    simplify
+  # Creates clusters: Connects nodes and edges for as long as it can for each CDR3
+  cc <- components(gg)
+  coords <- gg %>%
+    layout_with_mds()
+  #layout_with_graphopt(niter = 3000, charge = 0.005)
+  data.frame(CDR3aa = names(V(gg)),
+             x = coords[,1],
+             y = coords[,2],
+             stringsAsFactors = F) %>%
+    merge(
+      data.frame(CDR3aa = names(cc$membership),
+                 cid = cc$membership))
+}
+
+graph.layout <- layout_graph(pairs)
+save(graph.layout, file = paste(raw.file.path, "graph.layout.rda", sep = "/"))
 
 ### As a control, Look for the number of edges we see from repeated resampling of resting CDR3s ###
 # Get just negative data
