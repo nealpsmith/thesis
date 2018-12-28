@@ -160,7 +160,7 @@ neighbors
 stopCluster(cl)
 
 neighbor.df <- data.frame(CDR3aa = graph.layout$CDR3aa,
-                          neighbors.enriced = neighbors.enriched)
+                          neighbors.enriched = neighbors.enriched)
 
 
 # Now need to look at number of neighbors in resting CDR3s
@@ -168,14 +168,12 @@ neg.parse <- data.parse[grep("neg", names(data.parse))] %>%
   do.call(rbind, .) %>% select(., c("Read.count", "CDR3.nucleotide.sequence", "CDR3.amino.acid.sequence")) %>%
   aggregate(.~ CDR3.nucleotide.sequence + CDR3.amino.acid.sequence, data = ., sum)
   
-
-
 # Set cores for parallel processing
 cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
-system.time(neighbors.neg <- foreach(i = 1:3, .combine = c) %dopar%{
+neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar%{
   library(stringdist)
   neighbor.fun <- function(x){
     # Determine number of neighbors by homology
@@ -242,5 +240,10 @@ system.time(neighbors.neg <- foreach(i = 1:3, .combine = c) %dopar%{
   }
   neighbors <- neighbor.fun(graph.layout$CDR3aa[i])
   neighbors
-})
+}
 stopCluster(cl)
+
+# Add negative neighbors to dataframe
+neighbor.df$neighbors.neg <- neighbors.neg
+
+
