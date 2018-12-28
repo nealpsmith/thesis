@@ -18,6 +18,8 @@ library(stringdist)
 library(network)
 library(doParallel)
 library(foreach)
+library(DescTools)
+
 source("tcR_functions.R") #includes several modifications to tcR
 
 switch(Sys.info()[['user']],
@@ -180,7 +182,7 @@ neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar
     hom <- stringdist(x, neg.parse$CDR3.amino.acid.sequence, method = "lv")
     hom <- hom[hom <= 1]
     # Subtract 1 as to not count itself
-    edges <- length(hom) - 1
+    edges <- length(hom)
     
     # Determine number of edges by motifs
     # Determine if CDR3 has a top linear nmer
@@ -245,5 +247,15 @@ stopCluster(cl)
 
 # Add negative neighbors to dataframe
 neighbor.df$neighbors.neg <- neighbors.neg
+neighbor.df$neighbors.neg[neighbor.df$neighbors.neg < 0] <- 0
 
-
+gtest.df <- data.frame(neighbors.enriched = neighbor.df$neighbors.enriched,
+                       neighbors.neg = neighbor.df$neighbors.neg,
+                       non.neighbors.enriched = length(graph.layout$CDR3aa) - neighbor.df$neighbors.enriched,
+                       non.nieghbors.neg = length(neg.parse$CDR3.amino.acid.sequence) - neighbor.df$neighbors.neg)
+neighbor.df$p.value <- apply(gtest.df, 1, function(x){
+  gt <- GTest(matrix(x, ncol = 2))
+  return(gt$p.value)
+})
+matrix(gtest.df[1,], ncol = 2)
+x <- GTest()
