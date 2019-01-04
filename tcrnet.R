@@ -249,6 +249,7 @@ stopCluster(cl)
 neighbor.df$neighbors.neg <- neighbors.neg
 neighbor.df$neighbors.neg[neighbor.df$neighbors.neg < 0] <- 0
 
+# Perform a G-test looking at neighbors in psCDR3s and CD154-
 gtest.df <- data.frame(neighbors.enriched = neighbor.df$neighbors.enriched,
                        neighbors.neg = neighbor.df$neighbors.neg,
                        non.neighbors.enriched = length(graph.layout$CDR3aa) - neighbor.df$neighbors.enriched,
@@ -257,5 +258,56 @@ neighbor.df$p.value <- apply(gtest.df, 1, function(x){
   gt <- GTest(matrix(x, ncol = 2))
   return(gt$p.value)
 })
-matrix(gtest.df[1,], ncol = 2)
-x <- GTest()
+
+# Adjust the P-values with FDR
+neighbor.df <- FDR.function(neighbor.df, 0.05)
+
+# Get significant CDR3s and all of their neighbors
+core.CDR3s <- as.character(neighbor.df$CDR3aa[neighbor.df$FDRsig == 1])
+
+get.neighbors <- function(x){
+  # Determine number of neighbors by homology
+  hom <- stringdist(x, pos.parse.aggr$CDR3.amino.acid.sequence, method = "lv")
+  neighbors <- pos.parse.aggr$CDR3.amino.acid.sequence[which(hom <= 1)]
+  
+  # Determine number of edges by motifs
+  # Determine if CDR3 has a top linear nmer
+  if(grepl(paste(top.nmer.df$nmer, sep = "", collapse = "|"), substr(x, 4, nchar(x) - 3))){
+    CDR3.vec <- c()
+    # Get the nmer
+    for(i in 1:length(top.nmer.df$nmer)){
+      if (grepl(top.nmer.df$nmer[i], substr(x, 4, nchar(x) - 3))){
+        CDR3s <- pos.parse.aggr$CDR3.amino.acid.sequence[grep(top.nmer.df$nmer[i], substr(pos.parse.aggr$CDR3.amino.acid.sequence, 4,
+                                                                                     nchar(pos.parse.aggr$CDR3.amino.acid.sequence) - 3))]
+        CDR3.vec <- c(CDR3.vec, CDR3s)
+      }
+    }
+    # Get all CDR3s with that nmer
+    CDR3.vec <- unique(CDR3.vec)
+    neighbors <- c(neighbors, CDR3.vec)
+
+  }
+
+  # Determine number of edges by discontinuous motifs
+  # Get all discontinuous 4mers
+  disc.threemers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+                               CDR3.col = "CDR3", count.col = "count")
+  # Determine if any are in our list of top discontinuous 4mers
+  if(any(disc.threemers$nmer %in% top.disc.threemers$nmer)){
+    disc.CDR3s <- c()
+    # If there is the presence of a disc nmer, loop through the top nmers
+    for(i in 1:length(top.disc.threemers$nmer)){
+      # Find which top nmers it has
+      if(top.disc.threemers$nmer[i] %in% disc.threemers$nmer){
+        CDR3.match <- find_disc(top.disc.threemers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence)
+
+        disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+      }
+    }
+
+    # Combine discontinuous matches to CDR3 vector
+    neighbors <- c(neighbors, disc.CDR3s)
+  }
+  return(unique(neighbors))
+}
+get.neighbors(as.character(neighbor.df$CDR3aa[2]))
