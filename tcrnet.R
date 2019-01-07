@@ -1,5 +1,5 @@
 ### TCRNet analysis ###
-
+rm(list=ls())
 library(plyr) # load before dplyr to avoid conflicts due to masking
 library(dplyr)
 library(tcR)
@@ -25,7 +25,7 @@ switch(Sys.info()[['user']],
        nealp = {fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
        raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals.thesis.data"
        subset.data.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/PAID-UP, PNOIT2 Reactive vs Non-reactive paper/TCR Sequencing/Raw data BL T cell subsets"},
-       wayne1 = {fig.file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
+       wayne1 = {fig.file.path <- "~/Desktop/Neal_temp/figures"
        raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals.thesis.data"
        subset.data.path = "~/Dropbox (Partners HealthCare)/PAID-UP, PNOIT2 Reactive vs Non-reactive paper/TCR Sequencing/Raw data BL T cell subsets"},
        ns580 = {fig.file.path <- "~/thesis/figures"
@@ -35,16 +35,16 @@ switch(Sys.info()[['user']],
 
 switch(Sys.info()[['user']],
        nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
+       wayne1 = {neals.func.path = "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
        ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 source(neals.func.path)
 
-# Load in the data
+# Load in the data --> WGS: i need to back track to understand the rationale of each of these data sets
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
-load(paste(raw.file.path, "graph.layout.rda", sep = "/"))
+load(paste(raw.file.path, "graph.layout.rda", sep = "/")) 
 load(paste(raw.file.path, "node.pairs.rda", sep = "/"))
 load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
 load(paste(raw.file.path, "top.disc.threemers.rda", sep = "/"))
@@ -71,7 +71,9 @@ pos.parse <- do.call(rbind, pos.parse)
 pos.parse.aggr <- select(pos.parse, c("Read.count", "CDR3.nucleotide.sequence", "CDR3.amino.acid.sequence")) %>%
   aggregate(.~ CDR3.nucleotide.sequence + CDR3.amino.acid.sequence, data = ., sum)
 
-# Needed for next function
+## WGS: ok that length(pos.parse.aggr$CDR3.amino.acid.sequence) > length(unique(pos.parse.aggr$CDR3.amino.acid.sequence))?
+
+# Needed for next function -->WGS: don't see this function again?
 dist.to.df <- function(inDist) {
   if (class(inDist) != "dist") stop("wrong input type")
   A <- attr(inDist, "Size")
@@ -95,6 +97,8 @@ neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %
   neighbor.fun <- function(x){
   # Determine number of neighbors by homology
   hom <- stringdist(x, pos.parse.aggr$CDR3.amino.acid.sequence, method = "lv")
+  # --> WGS: alternative using stringDist::Biostrings (haven't tested yet; note that high score means more homology this will be very sensitive to opening and extension penalty parameters)
+  # pairwiseAlignment(pos.parse.aggr$CDR3.amino.acid.sequence, x, substitutionMatrix = "BLOSUM45", gapOpening = 0, gapExtension = 1, scoreOnly = TRUE)
   hom <- hom[hom <= 1]
   # Subtract 1 as to not count itself
   edges <- length(hom) - 1
@@ -114,7 +118,7 @@ neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %
     # Get all CDR3s with that nmer
     CDR3.vec <- unique(CDR3.vec)
     
-    # Get rid of any with a lev distance of 0 or 1 (alread been counted)
+    # Get rid of any with a lev distance of 0 or 1 (already been counted)
     CDR3.vec <- CDR3.vec[stringdist(x, CDR3.vec) > 1]
     
     # Count the edges
