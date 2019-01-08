@@ -68,19 +68,8 @@ pos.parse.aggr <- select(pos.parse, c("Read.count", "CDR3.nucleotide.sequence", 
   aggregate(.~ CDR3.nucleotide.sequence + CDR3.amino.acid.sequence, data = ., sum)
 
 ## WGS: ok that length(pos.parse.aggr$CDR3.amino.acid.sequence) > length(unique(pos.parse.aggr$CDR3.amino.acid.sequence))?
-
-# Needed for next function -->WGS: don't see this function again?
-dist.to.df <- function(inDist) {
-  if (class(inDist) != "dist") stop("wrong input type")
-  A <- attr(inDist, "Size")
-  B <- if (is.null(attr(inDist, "Labels"))) sequence(A) else attr(inDist, "Labels")
-  if (isTRUE(attr(inDist, "Diag"))) attr(inDist, "Diag") <- FALSE
-  if (isTRUE(attr(inDist, "Upper"))) attr(inDist, "Upper") <- FALSE
-  data.frame(
-    row = B[unlist(lapply(sequence(A)[-1], function(x) x:A))],
-    col = rep(B[-length(B)], (length(B)-1):1),
-    dist = as.vector(inDist))
-}
+## NS: Yes, some unqiue CDR3 AA sequences have multiple nucleotide sequences.  The aggregate function is aggregating read
+## counts of rows with the same CDR3 AA AND nucleotide sequence
 
 # Set cores for parallel processing
 cores <- detectCores()
