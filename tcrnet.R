@@ -5,14 +5,10 @@ library(dplyr)
 library(tcR)
 library(ggplot2)
 library(GGally)
-library(ggseqlogo)
-library(Biostrings)
 library(grid)
 library(gridBase)
 library(ggrepel)
 library(magrittr)
-library(stringi)
-library(stringr)
 library(stringdist)
 library(network)
 library(doParallel)
@@ -313,4 +309,10 @@ get.neighbors <- function(x){
   }
   return(unique(neighbors))
 }
-get.neighbors(as.character(neighbor.df$CDR3aa[2]))
+
+# Get the CDR3s of neighborhoods of interest
+core.neighborhoods <- lapply(core.CDR3s, get.neighbors)
+
+# Save this to be used to probe Teff and Treg compartments
+save(core.neighborhoods, file = paste(raw.file.path, "top.neighborhoods.rda", sep = "/"))
+
