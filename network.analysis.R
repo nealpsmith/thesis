@@ -83,17 +83,6 @@ pairs.disc <- foreach(i = 1:length(top.disc.threemers$nmer), .combine = rbind) %
 }
 stopCluster(cl)
 
-# Get pairs based on continuous nmers
-find_pairs_cont <- function(nmer, df, CDR3.col){
-  
-  # Iterate across the CDR3s looking for which ones have an nmer
-  CDR3s <- df[[CDR3.col]][grepl(nmer, substr(df[[CDR3.col]], 4, nchar(df[[CDR3.col]]) - 3))]
-  pairs <- combn(CDR3s, 2)
-  df <- data.frame("from.cdr3" = pairs[1,],
-                   "to.cdr3" = pairs[2,])
-  return(df)
-}
-
 # Set cores for parallel processing
 cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
@@ -168,6 +157,9 @@ self.edges <- lapply(net.CDR3s, function(x){
 
 # Add self-edges to pair list
 pairs <- rbind(pairs, self.edges)
+
+# Save the dataframe of pairs of nodes
+save(pairs, file = paste(raw.file.path, "node.pairs.rda", sep = "/"))
 
 # Write the pairs to a gml file to examine in cytoscape
 pairs.graph <- graph_from_data_frame(pairs)
