@@ -33,7 +33,7 @@ source(neals.func.path)
 # Load in the data
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
-load(paste(raw.file.path, "top.disc.threemers.rda", sep = "/"))
+load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
 load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
 
 # Make a single dataframe for all of the enriched CDR3s
@@ -75,9 +75,9 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
-pairs.disc <- foreach(i = 1:length(top.disc.threemers$nmer), .combine = rbind) %dopar% {
+pairs.disc <- foreach(i = 1:length(top.disc.fourmers$nmer), .combine = rbind) %dopar% {
   source(neals.func.path)
-  data = find_pairs_disc(top.disc.threemers$nmer[i], enriched.CDR3s.df,
+  data = find_pairs_disc(top.disc.fourmers$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
 }
@@ -163,7 +163,7 @@ save(pairs, file = paste(raw.file.path, "node.pairs.rda", sep = "/"))
 
 # Write the pairs to a gml file to examine in cytoscape
 pairs.graph <- graph_from_data_frame(pairs)
-write_graph(pairs.graph, "lev1.motif.graph.gml", format = "gml")
+write_graph(pairs.graph, paste(raw.file.path, "lev1.motif.graph.gml", sep = "/"), format = "gml")
 
 # Make a graph layout to get cluster IDs
 layout_graph <- function(graph) {
