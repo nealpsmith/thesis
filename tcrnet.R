@@ -43,7 +43,7 @@ load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
 load(paste(raw.file.path, "graph.layout.rda", sep = "/")) 
 load(paste(raw.file.path, "node.pairs.rda", sep = "/"))
 load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
-load(paste(raw.file.path, "top.disc.threemers.rda", sep = "/"))
+load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
 
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
 
@@ -115,16 +115,16 @@ neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %
   }
   # Determine number of edges by discontinuous motifs
   # Get all discontinuous 4mers
-  disc.threemers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+  disc.fourmers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
                                CDR3.col = "CDR3", count.col = "count")
   # Determine if any are in our list of top discontinuous 4mers
-  if(any(disc.threemers$nmer %in% top.disc.threemers$nmer)){
+  if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
     disc.CDR3s <- c()
     # If there is the presence of a disc nmer, loop through the top nmers
-    for(i in 1:length(top.disc.threemers$nmer)){
+    for(i in 1:length(top.disc.fourmers$nmer)){
       # Find which top nmers it has
-      if(top.disc.threemers$nmer[i] %in% disc.threemers$nmer){
-        CDR3.match <- find_disc(top.disc.threemers$nmer[i], pos.parse.aggr$CDR3.amino.acid.sequence)
+      if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
+        CDR3.match <- find_disc(top.disc.fourmers$nmer[i], pos.parse.aggr$CDR3.amino.acid.sequence)
         
         disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
       }
@@ -199,16 +199,16 @@ neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar
     }
     # Determine number of edges by discontinuous motifs
     # Get all discontinuous 4mers
-    disc.threemers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+    disc.fourmers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
                                  CDR3.col = "CDR3", count.col = "count")
     # Determine if any are in our list of top discontinuous 4mers
-    if(any(disc.threemers$nmer %in% top.disc.threemers$nmer)){
+    if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
       disc.CDR3s <- c()
       # If there is the presence of a disc nmer, loop through the top nmers
-      for(i in 1:length(top.disc.threemers$nmer)){
+      for(i in 1:length(top.disc.fourmers$nmer)){
         # Find which top nmers it has
-        if(top.disc.threemers$nmer[i] %in% disc.threemers$nmer){
-          CDR3.match <- find_disc(top.disc.threemers$nmer[i],neg.parse$CDR3.amino.acid.sequence)
+        if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
+          CDR3.match <- find_disc(top.disc.fourmers$nmer[i],neg.parse$CDR3.amino.acid.sequence)
           
           disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
         }
@@ -278,16 +278,16 @@ get.neighbors <- function(x){
 
   # Determine number of edges by discontinuous motifs
   # Get all discontinuous 4mers
-  disc.threemers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+  disc.fourmers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
                                CDR3.col = "CDR3", count.col = "count")
   # Determine if any are in our list of top discontinuous 4mers
-  if(any(disc.threemers$nmer %in% top.disc.threemers$nmer)){
+  if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
     disc.CDR3s <- c()
     # If there is the presence of a disc nmer, loop through the top nmers
-    for(i in 1:length(top.disc.threemers$nmer)){
+    for(i in 1:length(top.disc.fourmers$nmer)){
       # Find which top nmers it has
-      if(top.disc.threemers$nmer[i] %in% disc.threemers$nmer){
-        CDR3.match <- find_disc(top.disc.threemers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence)
+      if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
+        CDR3.match <- find_disc(top.disc.fourmers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence)
 
         disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
       }
