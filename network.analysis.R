@@ -39,20 +39,6 @@ load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
 # Make a single dataframe for all of the enriched CDR3s
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
 
-# Needed for next function
-dist.to.df <- function(inDist) {
-  if (class(inDist) != "dist") stop("wrong input type")
-  A <- attr(inDist, "Size")
-  B <- if (is.null(attr(inDist, "Labels"))) sequence(A) else attr(inDist, "Labels")
-  if (isTRUE(attr(inDist, "Diag"))) attr(inDist, "Diag") <- FALSE
-  if (isTRUE(attr(inDist, "Upper"))) attr(inDist, "Upper") <- FALSE
-  data.frame(
-    row = B[unlist(lapply(sequence(A)[-1], function(x) x:A))],
-    col = rep(B[-length(B)], (length(B)-1):1),
-    dist = as.vector(inDist))
-}
-
-
 # Function to find CDR3s that are within 1 AA difference (lev. distance)
 find_pairs_hom <- function(x, y) {
   res <- dist.to.df(as.dist(stringdistmatrix(x, y,
