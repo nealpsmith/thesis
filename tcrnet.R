@@ -40,8 +40,8 @@ source(neals.func.path)
 # Load in the data --> WGS: i need to back track to understand the rationale of each of these data sets
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
-load(paste(raw.file.path, "graph.layout.rda", sep = "/")) 
-load(paste(raw.file.path, "node.pairs.rda", sep = "/"))
+load(paste(raw.file.path, "graph.layout.rda", sep = "/")) # output of network.analysis
+load(paste(raw.file.path, "node.pairs.rda", sep = "/")) # output of network.analysis
 load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
 load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
 
@@ -144,7 +144,7 @@ neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %
   }
   return(edges)
   }
-neighbors <- neighbor.fun(graph.layout$CDR3aa[i])
+neighbors <- neighbor.fun(graph.layout$CDR3aa[i]) # ultimately this is to get a count of edges instead of a list glm file, right? so can probalby simplify the derivation of that count by aggregating the information in the glm rather than sort of 're-running' the homology/neighbor type functions
 neighbors
 }
 stopCluster(cl)
@@ -228,7 +228,7 @@ neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar
     }
     return(edges)
   }
-  neighbors <- neighbor.fun(graph.layout$CDR3aa[i])
+  neighbors <- neighbor.fun(graph.layout$CDR3aa[i]) # searching for neighbors of the CDR3's of interest within the CD154-; could aslo do this with some other control data set(s)
   neighbors
 }
 stopCluster(cl)
@@ -251,8 +251,9 @@ neighbor.df$p.value <- apply(gtest.df, 1, function(x){
 neighbor.df <- FDR.function(neighbor.df, 0.05)
 
 # Get significant CDR3s and all of their neighbors
-core.CDR3s <- as.character(neighbor.df$CDR3aa[neighbor.df$FDRsig == 1])
+core.CDR3s <- as.character(neighbor.df$CDR3aa[neighbor.df$FDRsig == 1]) # more neighbors than expected by chance
 
+## again, for below, i think you could do someting more succint to get these sequences
 get.neighbors <- function(x){
   # Determine number of neighbors by homology
   hom <- stringdist(x, pos.parse.aggr$CDR3.amino.acid.sequence, method = "lv")
