@@ -1,13 +1,13 @@
-library(plyr) # load before dplyr to avoid conflicts due to masking
+# library(plyr) # load before dplyr to avoid conflicts due to masking
 library(dplyr)
-library(tcR)
-library(ggplot2)
-library(grid)
-library(ggrepel)
+# library(tcR)
+# library(ggplot2)
+# library(grid)
+# library(ggrepel)
 library(magrittr)
-library(stringi)
-library(stringr)
-library(data.table)
+# library(stringi)
+# library(stringr)
+# library(data.table)
 library(doParallel)
 library(foreach)
 
@@ -21,12 +21,18 @@ switch(Sys.info()[['user']],
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+switch(Sys.info()[['user']],
+       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
+       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
+       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
+       stop("I don't recognize your username, type Sys.info() to find out what it is.")
+)
+source(neals.func.path)
 
 # Load in the raw data
 # Load in the data
-load("~/data/thesis/parsed.data.baseline.rda")
-load("~/data/thesis/enriched.CDR3s.rda")
+load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
+load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
 
 # Make enriched data into single dataframe
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
@@ -51,8 +57,8 @@ cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
-disc.fourmers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s)) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+disc.fourmers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
+  source(neals.func.path)
   # Make sure CDR3 is long enough
   if(nchar(CD154.neg.CDR3s[i,]$CDR3.amino.acid.sequence) >=10){
     # look at discontinuous 4mer on an individual CDR3 basis
@@ -63,7 +69,6 @@ disc.fourmers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s)) %dopar% {
   
 }
 
-disc.fourmers.neg <- rbindlist(disc.fourmers.neg)
 disc.fourmers.neg <- aggregate(. ~ nmer, data = disc.fourmers.neg, sum)
 
 disc.fourmers.neg$prop <- disc.fourmers.neg$count / sum(CD154.neg.CDR3s$Read.count)
@@ -104,18 +109,19 @@ registerDoParallel(cl)
 # Iterate across all of the CDR3s
 disc.fourmers.enriched$unique.people <- unlist(foreach(i = 1:length(disc.fourmers.enriched$nmer))
                                                 %dopar% {
-          source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+          source(neals.func.path)
           people <- unique.people.discontinuous(disc.fourmers.enriched$nmer[i],
                                                 enriched.CDR3s.df, "CDR3.amino.acid.sequence",
-                                                "id")
+                                                "id", motif.size = 4)
           people
       }
 )
 
+
 top.disc.fourmers <- disc.fourmers.enriched[disc.fourmers.enriched$unique.CDR3s.enriched >=3 &
                                disc.fourmers.enriched$enrichment >=10 &
                                disc.fourmers.enriched$unique.people >=3,]
-save(file = "top.disc.fourmers.rda", top.disc.fourmers)
+save(file = paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"), top.disc.fourmers)
 
 
 ### Look at discontinuous 5mers ###
@@ -132,7 +138,7 @@ cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
-disc.fivemers.neg1 <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
+disc.fivemers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
   source("~/data/neals_tcr_functions.R")
   # Make sure CDR3 is long enough
   if(nchar(CD154.neg.CDR3s[i,]$CDR3.amino.acid.sequence) >=11){
@@ -151,5 +157,24 @@ disc.fivemers.neg <- aggregate(. ~ nmer, data = disc.fivemers.neg, sum)
 
 disc.fivemers.neg$prop <- disc.fivemers.neg$count / sum(CD154.neg.CDR3s$Read.count)
 
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
 
+# Iterate across all of the CDR3s
+disc.fivemers.enriched$unique.people <- unlist(foreach(i = 1:length(disc.fivemers.enriched$nmer))
+                                               %dopar% {
+                                                 source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
+                                                 people <- unique.people.discontinuous(disc.fivemers.enriched$nmer[i],
+                                                                                       enriched.CDR3s.df, "CDR3.amino.acid.sequence",
+                                                                                       "id")
+                                                 people
+                                               }
+)
+
+top.disc.fivemers <- disc.fivemers.enriched[disc.fivemers.enriched$unique.CDR3s.enriched >=3 &
+                                              disc.fivemers.enriched$enrichment >=10 &
+                                              disc.fivemers.enriched$unique.people >=3,]
+save(file = paste(raw.file.path, "top.disc.fivemers.rda", sep = "/"), top.disc.fivemers)
 

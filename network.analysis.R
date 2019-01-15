@@ -31,27 +31,13 @@ switch(Sys.info()[['user']],
 )
 source(neals.func.path)
 # Load in the data
-load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
+load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/")) # all 27 confirmed PN allergic at baseline
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
 load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
-load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
+load(paste(raw.file.path, "top.nmers.rda", sep = "/")) # continuous 3, 4, and 5 mers (list)
 
 # Make a single dataframe for all of the enriched CDR3s
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
-
-# Needed for next function
-dist.to.df <- function(inDist) {
-  if (class(inDist) != "dist") stop("wrong input type")
-  A <- attr(inDist, "Size")
-  B <- if (is.null(attr(inDist, "Labels"))) sequence(A) else attr(inDist, "Labels")
-  if (isTRUE(attr(inDist, "Diag"))) attr(inDist, "Diag") <- FALSE
-  if (isTRUE(attr(inDist, "Upper"))) attr(inDist, "Upper") <- FALSE
-  data.frame(
-    row = B[unlist(lapply(sequence(A)[-1], function(x) x:A))],
-    col = rep(B[-length(B)], (length(B)-1):1),
-    dist = as.vector(inDist))
-}
-
 
 # Function to find CDR3s that are within 1 AA difference (lev. distance)
 find_pairs_hom <- function(x, y) {
@@ -90,7 +76,7 @@ registerDoParallel(cl)
 
 # Get pairs for dominant 3mers
 pairs.threemers <- foreach(i = 1:length(top.nmers$threemer$nmer), .combine = rbind) %dopar% {
-  source(neals.func.path)
+  source(neals.func.path) # alternatively place this on github
   data = find_pairs_cont(top.nmers$threemer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -131,12 +117,12 @@ pairs <- pairs[!pairs$from.cdr3 == pairs$to.cdr3,]
 net.CDR3s <- unique(c(pairs$from.cdr3, pairs$to.cdr3))
 
 # Look for multiple nucleotide sequences for each CDR3
-# Need to get correct nucleotide sequence info
+# Need to get correct nucleotide sequence info from the original parsed data set loaded above
 pos.parse <- data.parse[grep("pos", names(data.parse))]
 names(pos.parse) <- substr(names(pos.parse), 0, nchar(names(pos.parse)) - 4)
 
 # # TEST: Make sure names are correct and in order
-# names(pos.parse) == names(enriched.CDR3s)
+# names(pos.parse) == names(enriched.CDR3s) ------> could alternatively encode name matching of some sort
 
 # Make a single dataframe that has nucleotide info for everyones enriched CDR3s
 for(i in 1:length(pos.parse)){
@@ -165,6 +151,7 @@ save(pairs, file = paste(raw.file.path, "node.pairs.rda", sep = "/"))
 pairs.graph <- graph_from_data_frame(pairs)
 write_graph(pairs.graph, paste(raw.file.path, "lev1.motif.graph.gml", sep = "/"), format = "gml")
 
+# ------------ not using below visualization at this point
 # Make a graph layout to get cluster IDs
 layout_graph <- function(graph) {
   set.seed(42)
