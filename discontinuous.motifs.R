@@ -13,21 +13,15 @@ library(foreach)
 
 switch(Sys.info()[['user']],
        nealp = {fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
-       raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+       raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals.thesis.data"},
        wayne1 = {fig.file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
-       raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+       raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals.thesis.data"},
        ns580 = {fig.file.path <- "~/thesis/figures"
        raw.file.path <- "~/data/thesis"},
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-switch(Sys.info()[['user']],
-       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
-       stop("I don't recognize your username, type Sys.info() to find out what it is.")
-)
-source(neals.func.path)
+source("neals_tcr_functions.R")
 
 # Load in the raw data
 # Load in the data
@@ -58,7 +52,7 @@ registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
 disc.fourmers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
-  source(neals.func.path)
+  source("neals_tcr_functions.R")
   # Make sure CDR3 is long enough
   if(nchar(CD154.neg.CDR3s[i,]$CDR3.amino.acid.sequence) >=10){
     # look at discontinuous 4mer on an individual CDR3 basis
@@ -68,6 +62,8 @@ disc.fourmers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dop
   }
   
 }
+stopCluster(cl)
+remove(cores); remove(cl)
 
 disc.fourmers.neg <- aggregate(. ~ nmer, data = disc.fourmers.neg, sum)
 
@@ -139,7 +135,7 @@ registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
 disc.fivemers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
+  source("neals_tcr_functions.R")
   # Make sure CDR3 is long enough
   if(nchar(CD154.neg.CDR3s[i,]$CDR3.amino.acid.sequence) >=11){
     # look at discontinuous 4mer on an individual CDR3 basis
@@ -150,12 +146,21 @@ disc.fivemers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dop
   
 }
 stopCluster(cl)
+remove(cores); remove(cl)
 
 
 
 disc.fivemers.neg <- aggregate(. ~ nmer, data = disc.fivemers.neg, sum)
 
 disc.fivemers.neg$prop <- disc.fivemers.neg$count / sum(CD154.neg.CDR3s$Read.count)
+
+# Join negative data to positive data
+disc.fivemers.enriched <- left_join(disc.fivemers.enriched, disc.fivemers.neg, by = "nmer")
+colnames(disc.fivemers.enriched) <- c("nmer", "unique.CDR3s.enriched", "activated.count",
+                                      "prop.enriched", "unique.CDR3s.neg", "resting.count",
+                                      "prop.neg")
+disc.fivemers.enriched$enrichment <- disc.fivemers.enriched$prop.enriched / disc.fivemers.enriched$prop.neg
+
 
 # Set cores for parallel processing
 cores <- detectCores()
