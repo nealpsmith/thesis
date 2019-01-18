@@ -80,6 +80,51 @@ save(enriched.CDR3s, file = paste(raw.file.path, "neals.thesis.data/enriched.CDR
 
 enriched.CDR3.df <- do.call(rbind, enriched.CDR3s)
 
+# Create a dataframe with general information
+info.df <- data.frame(id = names(enriched.CDR3s),
+                resting.CDR3nuc = unlist(lapply(data.parse[grep("neg", names(data.parse))], nrow)),
+                resting.CDR3AA = unlist(lapply(data.parse[grep("neg", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))})),
+                activated.CDR3nuc = unlist(lapply(data.parse[grep("pos", names(data.parse))], nrow)),
+                activated.CDR3AA = unlist(lapply(data.parse[grep("pos", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))
+                })),
+                psCDR3nuc = unlist(lapply(grep("pos", names(data.parse), value = TRUE), function(x){
+                  nrow(data.parse[[x]][data.parse[[x]]$CDR3.amino.acid.sequence %in% 
+                                         enriched.CDR3s[[gsub("([0-9]+).*$", "\\1", x)]]$CDR3.amino.acid.sequence,])
+                })),
+                psCDR3AA = unlist(lapply(enriched.CDR3s, nrow))
+                )
+info.df$psCDR3nuc.perc <- (info.df$psCDR3nuc / info.df$activated.CDR3nuc) * 100
+info.df$psCDR3AA.perc <- (info.df$psCDR3AA / info.df$activated.CDR3AA) * 100
+
+#Plot this basic info
+plot.df <- melt(info.df, id.vars = "id")
+
+pdf(paste(fig.file.path, "basic.count.plots.pdf", sep = "/"), 7, 7)
+ggplot(plot.df[grep("resting", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("Resting CDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[grep("activated", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("activated CDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[plot.df$variable == "psCDR3nuc" | plot.df$variable == "psCDR3AA",], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("psCDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[grep("perc", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("percent of activated CDR3s") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("percent of activated CDR3s that are psCDR3s") +
+  theme_bw(base_size = 15)
+dev.off()
+
+
 # Hamming analysis
 # Perform hamming on entire list of peanut CDR3s
 min.ham <- CDR3_ham(enriched.CDR3.df$CDR3.amino.acid.sequence)
