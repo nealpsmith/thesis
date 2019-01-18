@@ -1,9 +1,9 @@
 # library(plyr) # load before dplyr to avoid conflicts due to masking
 library(dplyr)
 # library(tcR)
-# library(ggplot2)
+library(ggplot2)
 # library(grid)
-# library(ggrepel)
+library(ggrepel)
 library(magrittr)
 # library(stringi)
 # library(stringr)
@@ -22,7 +22,7 @@ switch(Sys.info()[['user']],
 )
 
 
-source(neals.func.path)
+source("neals_tcr_functions.R")
 
 # Load in the raw data
 # Load in the data
@@ -52,24 +52,20 @@ disc.fourmer.neg.gen <- disc.fourmer.gen(CD154.neg.CDR3s, 1)
 
 # Set cores for parallel processing
 cores <- detectCores()
-cl <- makeCluster(cores[1]-3)
+cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
-system.time(disc.fourmers.neg <- foreach(i = 1:20, .combine = rbind) %dopar% {
+disc.fourmers.neg <- foreach(i = 1:length(disc.fourmers.enriched$nmer), .combine = rbind) %dopar% {
   source("neals_tcr_functions.R")
   data <- find_disc_4mer(disc.fourmers.enriched$nmer[i], CD154.neg.CDR3s, CDR3.col = 1, count.col = 2,
                          disc.fourmer.neg.gen)
   data
 
-})
+}
 stopCluster(cl)
 remove(cores); remove(cl)
 
-
-test <- find_disc_4mer("SXPG",CD154.neg.CDR3s, 1, 2, x)
-
-x <- disc.fourmers.neg$prop <- disc.fourmers.neg$count / sum(CD154.neg.CDR3s$Read.count)
 
 # Join negative data to positive data
 disc.fourmers.enriched <- left_join(disc.fourmers.enriched, disc.fourmers.neg, by = "nmer")
@@ -107,13 +103,15 @@ registerDoParallel(cl)
 # Iterate across all of the CDR3s
 disc.fourmers.enriched$unique.people <- unlist(foreach(i = 1:length(disc.fourmers.enriched$nmer))
                                                %dopar% {
-                                                 source(neals.func.path)
+                                                 source("neals_tcr_functions.R")
                                                  people <- unique.people.discontinuous(disc.fourmers.enriched$nmer[i],
                                                                                        enriched.CDR3s.df, "CDR3.amino.acid.sequence",
-                                                                                       "id", motif.size = 4)
+                                                                                       "id", 4)
                                                  people
                                                }
 )
+stopCluster(cl)
+remove(cores); remove(cl)
 
 
 top.disc.fourmers <- disc.fourmers.enriched[disc.fourmers.enriched$unique.CDR3s.enriched >=3 &
@@ -129,6 +127,36 @@ disc.fivemers.enriched <- disc.5mers(enriched.CDR3s.df, CDR3.col = "CDR3.amino.a
 # Add in read proportion to dataframe
 disc.fivemers.enriched$prop = disc.fivemers.enriched$count / sum(enriched.CDR3s.df$activated.count)
 
+# Limit to those that could meet our criteria (to make negative iterations faster)
+disc.fivemers.enriched <- disc.fivemers.enriched[disc.fivemers.enriched$unique.CDR3s >= 3,]
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+# Iterate across all nmers, determine number of unique people in enriched contribute
+disc.fivemers.enriched$unique.people <- unlist(foreach(i = 1:length(disc.fivemers.enriched$nmer))
+                                               %dopar% {
+                                                 source("neals_tcr_functions.R")
+                                                 people <- unique.people.discontinuous(disc.fivemers.enriched$nmer[i],
+                                                                                       enriched.CDR3s.df, "CDR3.amino.acid.sequence",
+                                                                                       "id", 5)
+                                                 people
+                                               }
+)
+stopCluster(cl)
+remove(cores); remove(cl)
+
+disc.fivemers.enriched <- disc.fivemers.enriched[disc.fivemers.enriched$unique.people >= 3,]
+
+# Generate all the possible disc 5mers for the CD154- data
+disc.fivemer.neg.gen <- disc.fivemer.gen(CD154.neg.CDR3s, 1)
+
+# Get rid of 5mers that we will not care about
+disc.fivemer.neg.gen <- lapply(disc.fivemer.neg.gen, function(x){
+  x <- x[x %in% disc.fivemers.enriched$nmer]
+})
+
 ### For CD154- CDR3s, do parallel processing to make things go faster ###
 # Set cores for parallel processing
 cores <- detectCores()
@@ -136,40 +164,43 @@ cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
 # Iterate across all of the CDR3s
-disc.fivemers.neg <- foreach(i = 1:nrow(CD154.neg.CDR3s), .combine = rbind) %dopar% {
-  source("~/data/neals_tcr_functions.R")
-  # Make sure CDR3 is long enough
-  if(nchar(CD154.neg.CDR3s[i,]$CDR3.amino.acid.sequence) >=11){
-    # look at discontinuous 4mer on an individual CDR3 basis
-    data <- disc.5mers(CD154.neg.CDR3s[i,], CDR3.col = "CDR3.amino.acid.sequence",
-                       count.col = "Read.count")
-    data
-  }
+disc.fivemers.neg <- foreach(i = 1:length(disc.fivemers.enriched$nmer), .combine = rbind) %dopar% {
+  source("neals_tcr_functions.R")
+  data <- find_disc_5mer(disc.fivemers.enriched$nmer[i], CD154.neg.CDR3s, CDR3.col = 1, count.col = 2,
+                         disc.fivemer.neg.gen)
+  data
   
 }
 stopCluster(cl)
+remove(cores); remove(cl)
 
+# Join negative data to positive data
+disc.fivemers.enriched <- left_join(disc.fivemers.enriched, disc.fivemers.neg, by = "nmer")
+colnames(disc.fivemers.enriched) <- c("nmer", "unique.CDR3s.enriched", "activated.count",
+                                      "prop.enriched", "unique.people","unique.CDR3s.neg", "resting.count",
+                                      "prop.neg")
+disc.fivemers.enriched$enrichment <- disc.fivemers.enriched$prop.enriched / disc.fivemers.enriched$prop.neg
 
-
-disc.fivemers.neg <- aggregate(. ~ nmer, data = disc.fivemers.neg, sum)
-
-disc.fivemers.neg$prop <- disc.fivemers.neg$count / sum(CD154.neg.CDR3s$Read.count)
-
-# Set cores for parallel processing
-cores <- detectCores()
-cl <- makeCluster(cores[1]-1)
-registerDoParallel(cl)
-
-# Iterate across all of the CDR3s
-disc.fivemers.enriched$unique.people <- unlist(foreach(i = 1:length(disc.fivemers.enriched$nmer))
-                                               %dopar% {
-                                                 source(paste(raw.file.path, "neals_tcr_functions.R", sep = "/"))
-                                                 people <- unique.people.discontinuous(disc.fivemers.enriched$nmer[i],
-                                                                                       enriched.CDR3s.df, "CDR3.amino.acid.sequence",
-                                                                                       "id")
-                                                 people
-                                               }
-)
+pdf("discontinous.5mers.pdf", 12, 7)
+ggplot(data = disc.fivemers.enriched, aes(x = prop.neg, y = prop.enriched)) +
+  geom_jitter(data = disc.fivemers.enriched[!disc.fivemers.enriched$enrichment > 3 |
+                                              !disc.fivemers.enriched$unique.CDR3s.enriched > 2 |
+                                              !disc.fivemers.enriched$prop.enriched >= 0.01,], color = "grey", size = 1) +
+  geom_jitter(data = disc.fivemers.enriched[disc.fivemers.enriched$enrichment >=3 &
+                                              disc.fivemers.enriched$unique.CDR3s.enriched > 2 &
+                                              disc.fivemers.enriched$prop.enriched >= 0.01,],
+              color = "red", aes(size = unique.CDR3s.enriched)) +
+  geom_text_repel(data = disc.fivemers.enriched[disc.fivemers.enriched$enrichment >=3 &
+                                                  disc.fivemers.enriched$unique.CDR3s.enriched > 2 &
+                                                  disc.fivemers.enriched$prop.enriched >=0.01,],
+                  aes(label = nmer),
+                  min.segment.length = 0.12, size = 5) +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Proportion in CD154- CDR3s") + ylab("Proportion in enriched CDR3s") +
+  labs(size = "Unique CDR3s") +
+  ggtitle("discontinuous 5mers in Enriched CDR3s vs. CD154- CDR3s") +
+  theme_bw(base_size = 18)
+dev.off()
 
 top.disc.fivemers <- disc.fivemers.enriched[disc.fivemers.enriched$unique.CDR3s.enriched >=3 &
                                               disc.fivemers.enriched$enrichment >=10 &
