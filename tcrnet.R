@@ -16,6 +16,7 @@ library(foreach)
 library(DescTools)
 
 source("tcR_functions.R") #includes several modifications to tcR
+source("neals_tcr_functions.R")
 
 switch(Sys.info()[['user']],
        nealp = {fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
@@ -29,21 +30,15 @@ switch(Sys.info()[['user']],
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-switch(Sys.info()[['user']],
-       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       wayne1 = {neals.func.path = "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
-       stop("I don't recognize your username, type Sys.info() to find out what it is.")
-)
-source(neals.func.path)
+
 
 # Load in the data --> WGS: i need to back track to understand the rationale of each of these data sets
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/"))
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
-load(paste(raw.file.path, "graph.layout.rda", sep = "/")) # output of network.analysis
 load(paste(raw.file.path, "node.pairs.rda", sep = "/")) # output of network.analysis
 load(paste(raw.file.path, "top.nmers.rda", sep = "/"))
 load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
+load(paste(raw.file.path, "top.disc.fivemers.rda", sep = "/"))
 
 enriched.CDR3s.df <- do.call(rbind, enriched.CDR3s)
 
@@ -71,13 +66,15 @@ pos.parse.aggr <- select(pos.parse, c("Read.count", "CDR3.nucleotide.sequence", 
 ## NS: Yes, some unqiue CDR3 AA sequences have multiple nucleotide sequences.  The aggregate function is aggregating read
 ## counts of rows with the same CDR3 AA AND nucleotide sequence
 
+# Get the CDR3s to look at
+net.CDR3s <- unique(c(pairs$from.cdr3, pairs$to.cdr3))
+
 # Set cores for parallel processing
 cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
-
 # Need to figure out how many neighbors each node has
-neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar%{
+neighbors.enriched <- foreach(i = 1:length(net.CDR3s), .combine = c) %dopar%{
   library(stringdist)
   neighbor.fun <- function(x){
   # Determine number of neighbors by homology
@@ -114,42 +111,76 @@ neighbors.enriched <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %
     
   }
   # Determine number of edges by discontinuous motifs
-  # Get all discontinuous 4mers
-  disc.fourmers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
-                               CDR3.col = "CDR3", count.col = "count")
-  # Determine if any are in our list of top discontinuous 4mers
-  if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
-    disc.CDR3s <- c()
-    # If there is the presence of a disc nmer, loop through the top nmers
-    for(i in 1:length(top.disc.fourmers$nmer)){
-      # Find which top nmers it has
-      if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
-        CDR3.match <- find_disc(top.disc.fourmers$nmer[i], pos.parse.aggr$CDR3.amino.acid.sequence)
-        
-        disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+  if(nchar(x) >= 10) {
+    # Get all discontinuous 4mers
+    disc.fourmers <- disc.4mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+                                CDR3.col = "CDR3", count.col = "count")
+    # Determine if any are in our list of top discontinuous 4mers
+    if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
+      disc.CDR3s <- c()
+      # If there is the presence of a disc nmer, loop through the top nmers
+      for(i in 1:length(top.disc.fourmers$nmer)){
+        # Find which top nmers it has
+        if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
+          CDR3.match <- find_disc(top.disc.fourmers$nmer[i], pos.parse.aggr$CDR3.amino.acid.sequence, motif.length = 4)
+          
+          disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+        }
       }
+      # Get rid of CDR3s that have been counted already
+      if(exists("CDR3.vec")){
+        disc.CDR3s <- disc.CDR3s[!disc.CDR3s %in% CDR3.vec]
+        disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
+        # Add the new CDR3s to make sure there aren't duplicates later on when looking at discountinous 5mers
+        CDR3.vec <- c(CDR3.vec, disc.CDR3s)
+      } else{
+        disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
+      }
+      # Count them up, subtract one to not count itself
+      CDR3.count.disc.4mer <- nrow(pos.parse.aggr[pos.parse.aggr$CDR3.amino.acid.sequence %in% disc.CDR3s,])
+      
+      # Add to final edges count
+      edges <- edges + CDR3.count.disc.4mer
     }
-    # Get rid of CDR3s that have been counted already
-    if(exists("CDR3.vec")){
-      disc.CDR3s <- disc.CDR3s[!disc.CDR3s %in% CDR3.vec]
-      disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
-    } else{
-      disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
-    }
-    # Count them up, subtract one to not count itself
-    CDR3.count.disc <- nrow(pos.parse.aggr[pos.parse.aggr$CDR3.amino.acid.sequence %in% disc.CDR3s,])
-    
-    # Add to final edges count
-    edges <- edges + CDR3.count.disc
   }
+  if(nchar(x) >=11){
+    disc.fivemers <- disc.5mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+                                CDR3.col = "CDR3", count.col = "count")
+    # Determine if any are in our list of top discontinuous 4mers
+    if(any(disc.fivemers$nmer %in% top.disc.fivemers$nmer)){
+      disc.CDR3s <- c()
+      # If there is the presence of a disc nmer, loop through the top nmers
+      for(i in 1:length(top.disc.fivemers$nmer)){
+        # Find which top nmers it has
+        if(top.disc.fivemers$nmer[i] %in% disc.fivemers$nmer){
+          CDR3.match <- find_disc(top.disc.fivemers$nmer[i], pos.parse.aggr$CDR3.amino.acid.sequence, motif.length = 5)
+          
+          disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+        }
+      }
+      # Get rid of CDR3s that have been counted already
+      if(exists("CDR3.vec")){
+        disc.CDR3s <- disc.CDR3s[!disc.CDR3s %in% CDR3.vec]
+        disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
+      } else{
+        disc.CDR3s <- disc.CDR3s[stringdist(x, disc.CDR3s) > 1]
+      }
+      # Count them up, subtract one to not count itself
+      CDR3.count.disc.5mer <- nrow(pos.parse.aggr[pos.parse.aggr$CDR3.amino.acid.sequence %in% disc.CDR3s,])
+      
+      # Add to final edges count
+      edges <- edges + CDR3.count.disc.5mer
+    }
+  }
+   
   return(edges)
   }
-neighbors <- neighbor.fun(graph.layout$CDR3aa[i]) # ultimately this is to get a count of edges instead of a list glm file, right? so can probalby simplify the derivation of that count by aggregating the information in the glm rather than sort of 're-running' the homology/neighbor type functions
+neighbors <- neighbor.fun(net.CDR3s[i]) # ultimately this is to get a count of edges instead of a list glm file, right? so can probalby simplify the derivation of that count by aggregating the information in the glm rather than sort of 're-running' the homology/neighbor type functions
 neighbors
 }
 stopCluster(cl)
 
-neighbor.df <- data.frame(CDR3aa = graph.layout$CDR3aa,
+neighbor.df <- data.frame(CDR3aa = net.CDR3s,
                           neighbors.enriched = neighbors.enriched)
 
 
@@ -163,7 +194,7 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
-neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar%{
+neighbors.neg <- foreach(i = 1:net.CDR3s, .combine = c) %dopar%{
   library(stringdist)
   neighbor.fun <- function(x){
     # Determine number of neighbors by homology
@@ -228,7 +259,7 @@ neighbors.neg <- foreach(i = 1:length(graph.layout$CDR3aa), .combine = c) %dopar
     }
     return(edges)
   }
-  neighbors <- neighbor.fun(graph.layout$CDR3aa[i]) # searching for neighbors of the CDR3's of interest within the CD154-; could aslo do this with some other control data set(s)
+  neighbors <- neighbor.fun(net.CDR3s[i]) # searching for neighbors of the CDR3's of interest within the CD154-; could aslo do this with some other control data set(s)
   neighbors
 }
 stopCluster(cl)
@@ -240,7 +271,7 @@ neighbor.df$neighbors.neg[neighbor.df$neighbors.neg < 0] <- 0
 # Perform a G-test looking at neighbors in psCDR3s and CD154-
 gtest.df <- data.frame(neighbors.enriched = neighbor.df$neighbors.enriched,
                        neighbors.neg = neighbor.df$neighbors.neg,
-                       non.neighbors.enriched = length(graph.layout$CDR3aa) - neighbor.df$neighbors.enriched,
+                       non.neighbors.enriched = length(net.CDR3s) - neighbor.df$neighbors.enriched,
                        non.nieghbors.neg = length(neg.parse$CDR3.amino.acid.sequence) - neighbor.df$neighbors.neg)
 neighbor.df$p.value <- apply(gtest.df, 1, function(x){
   gt <- GTest(matrix(x, ncol = 2))
