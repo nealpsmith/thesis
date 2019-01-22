@@ -457,10 +457,21 @@ ggplot(plot.df, aes(x = variable, y = edges)) + geom_bar(stat = "identity") +
   theme_bw()
 dev.off()
 
+# Create a dataframe to plot number of "large" clusters 
+plot.df <- data.frame(variable = c("Random CD154-", "Random CD154+", "psCDR3s"), 
+                      lrg.clust = c(median(neg.lrg.clust), median(pos.lrg.clust), 
+                                length(clusters(pairs.graph)$csize[clusters(pairs.graph)$csize >= 5])),
+                      sd = c(sd(neg.lrg.clust), sd(pos.lrg.clust), 0))
+plot.df$variable <- factor(plot.df$variable, levels = plot.df$variable)
 
-x <- data.frame(size = x$csize)
-ggplot(x, aes(x = size)) + geom_histogram(bins = 100)
-
+pdf(paste(fig.file.path, "large.clusters.psCDR3s.vs.random.CDR3s.pdf", sep = "/"), 7, 7)
+ggplot(plot.df, aes(x = variable, y = lrg.clust)) + geom_bar(stat = "identity") +
+  geom_errorbar(data = plot.df[plot.df$sd > 0,], aes(ymin = lrg.clust - sd, 
+                                                     ymax = lrg.clust + sd), width = 0.2) +
+  ggtitle("Large clusters in psCDR3s vs. randomly sampled CDR3s") +
+  xlab("") + ylab("# of clusters > 4 CDR3s") + 
+  theme_bw(base_size = 15)
+dev.off()
 
 ### Want to take clusters and look for any HLA association ###
 # Load HLA data 
