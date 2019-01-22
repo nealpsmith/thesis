@@ -1,15 +1,14 @@
 library(plyr) # load before dplyr to avoid conflicts due to masking
 library(dplyr)
-library(tcR)
 library(ggplot2)
 library(GGally)
 library(ggseqlogo)
 library(Biostrings)
-#library(msa)
 library(ggrepel)
 library(magrittr)
 library(network)
 library(stringdist)
+library(igraph)
 library(doParallel)
 library(foreach)
 
@@ -23,17 +22,12 @@ switch(Sys.info()[['user']],
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-switch(Sys.info()[['user']],
-       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
-       stop("I don't recognize your username, type Sys.info() to find out what it is.")
-)
-source(neals.func.path)
+source("neals_tcr_functions.R")
 # Load in the data
 load(paste(raw.file.path, "parsed.data.baseline.rda", sep = "/")) # all 27 confirmed PN allergic at baseline
 load(paste(raw.file.path, "enriched.CDR3s.rda", sep = "/"))
-load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/"))
+load(paste(raw.file.path, "top.disc.fourmers.rda", sep = "/")) # discontinuous 4mers
+load(paste(raw.file.path, "top.disc.fivemers.rda", sep = "/")) # discontinuous 5mers
 load(paste(raw.file.path, "top.nmers.rda", sep = "/")) # continuous 3, 4, and 5 mers (list)
 
 # Make a single dataframe for all of the enriched CDR3s
@@ -61,13 +55,29 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
-pairs.disc <- foreach(i = 1:length(top.disc.fourmers$nmer), .combine = rbind) %dopar% {
-  source(neals.func.path)
+pairs.disc.4mer <- foreach(i = 1:length(top.disc.fourmers$nmer), .combine = rbind) %dopar% {
+  source("neals_tcr_functions.R")
   data = find_pairs_disc(top.disc.fourmers$nmer[i], enriched.CDR3s.df,
-                         CDR3.col = "CDR3.amino.acid.sequence")
+                         CDR3.col = "CDR3.amino.acid.sequence", motif.size = 4)
   data
 }
 stopCluster(cl)
+remove(cores); remove(cl)
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+
+pairs.disc.5mer <- foreach(i = 1:length(top.disc.fivemers$nmer), .combine = rbind) %dopar% {
+  source("neals_tcr_functions.R")
+  data = find_pairs_disc(top.disc.fivemers$nmer[i], enriched.CDR3s.df,
+                         CDR3.col = "CDR3.amino.acid.sequence", motif.size = 5)
+  data
+}
+stopCluster(cl)
+remove(cores); remove(cl)
+
 
 # Set cores for parallel processing
 cores <- detectCores()
@@ -76,7 +86,7 @@ registerDoParallel(cl)
 
 # Get pairs for dominant 3mers
 pairs.threemers <- foreach(i = 1:length(top.nmers$threemer$nmer), .combine = rbind) %dopar% {
-  source(neals.func.path) # alternatively place this on github
+  source("neals_tcr_functions.R") 
   data = find_pairs_cont(top.nmers$threemer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -84,7 +94,7 @@ pairs.threemers <- foreach(i = 1:length(top.nmers$threemer$nmer), .combine = rbi
 
 # Get pairs for dominant 4mers
 pairs.fourmers <- foreach(i = 1:length(top.nmers$fourmer$nmer), .combine = rbind) %dopar% {
-  source(neals.func.path)
+  source("neals_tcr_functions.R") 
   data = find_pairs_cont(top.nmers$fourmer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
@@ -92,16 +102,16 @@ pairs.fourmers <- foreach(i = 1:length(top.nmers$fourmer$nmer), .combine = rbind
 
 # Get pairs for dominant 5mers
 pairs.fivemers <- foreach(i = 1:length(top.nmers$fivemer$nmer), .combine = rbind) %dopar% {
-  source(neals.func.path)
+  source("neals_tcr_functions.R") 
   data = find_pairs_cont(top.nmers$fivemer$nmer[i], enriched.CDR3s.df,
                          CDR3.col = "CDR3.amino.acid.sequence")
   data
 }
 stopCluster(cl)
-
+remove(cores); remove(cl)
 
 # Add all of the pairs
-pairs <- rbind(pairs.lev, pairs.disc, pairs.threemers, pairs.fourmers, pairs.fivemers)
+pairs <- rbind(pairs.lev, pairs.disc.4mer, pairs.disc.5mer, pairs.threemers, pairs.fourmers, pairs.fivemers)
 
 # Limit to unique edges
 pairs <- unique(pairs)
@@ -151,48 +161,144 @@ save(pairs, file = paste(raw.file.path, "node.pairs.rda", sep = "/"))
 pairs.graph <- graph_from_data_frame(pairs)
 write_graph(pairs.graph, paste(raw.file.path, "lev1.motif.graph.gml", sep = "/"), format = "gml")
 
-# ------------ not using below visualization at this point
-# Make a graph layout to get cluster IDs
-layout_graph <- function(graph) {
-  set.seed(42)
-  # Create a graph from the dataframe
-  gg <- graph %>%
-    graph_from_data_frame %>%
-    simplify
-  # Creates clusters: Connects nodes and edges for as long as it can for each CDR3
-  cc <- components(gg)
-  coords <- gg %>%
-    layout_with_mds()
-  #layout_with_graphopt(niter = 3000, charge = 0.005)
-  data.frame(CDR3aa = names(V(gg)),
-             x = coords[,1],
-             y = coords[,2],
-             stringsAsFactors = F) %>%
-    merge(
-      data.frame(CDR3aa = names(cc$membership),
-                 cid = cc$membership))
-}
-
-graph.layout <- layout_graph(pairs)
-save(graph.layout, file = paste(raw.file.path, "graph.layout.rda", sep = "/"))
 
 ### As a control, Look for the number of edges we see from repeated resampling of resting CDR3s ###
 # Get just negative data
 neg.data <- data.parse[grep("neg", names(data.parse))] %>%
   do.call(rbind, .) %>%
-  select(., CDR3.amino.acid.sequence)
+  select(., CDR3.nucleotide.sequence, CDR3.amino.acid.sequence, Read.count) %>%
+  apply(., 1, function(y){
+  y <- do.call(rbind, replicate(y[["Read.count"]], y, simplify = FALSE))
+}) %>% do.call(rbind, .) %>% as.data.frame(.)
+
+# # TEST: Make sure this is the correct sized dataframe
+# nrow(neg.data) == sum(unlist(lapply(data.parse[grep("neg", names(data.parse))], function(x) sum(x$Read.count))))
 
 # Get just positive data
 pos.data <- data.parse[grep("pos", names(data.parse))] %>%
   do.call(rbind, .) %>%
-  select(., CDR3.amino.acid.sequence)
+  select(., CDR3.nucleotide.sequence, CDR3.amino.acid.sequence)
+
 
 neg.edges.vec <- vector(mode = "numeric", length = 50) 
-for(i in 1:50){
-  random.CDR3s <-  sample(neg.data$CDR3.amino.acid.sequence, length(unique(enriched.CDR3s.df$CDR3.amino.acid.sequence)))
-  pairs.control <- find_pairs_hom(random.CDR3s, random.CDR3s)
-  neg.edges.vec[i] <- nrow(pairs.control)
-}
+system.time(for(i in 1:1){
+  # Get random CDR3s
+  indx <- sample.int(nrow(neg.data) ,size = length(enriched.CDR3s.df$CDR3.amino.acid.sequence))
+  random.CDR3s <-  neg.data[indx,]
+  
+  # Change from factors to character vectors (should change this earlier on)
+  random.CDR3s$CDR3.nucleotide.sequence <- as.character(random.CDR3s$CDR3.nucleotide.sequence)
+  random.CDR3s$CDR3.amino.acid.sequence <- as.character(random.CDR3s$CDR3.amino.acid.sequence)
+  # Determine the number of pairs from homology
+  pairs.lev.ctrl <- find_pairs_hom(random.CDR3s$CDR3.amino.acid.sequence, random.CDR3s$CDR3.amino.acid.sequence)
+  
+  ### Determine the number of pairs from nmers ###
+  # Set cores for parallel processing
+  cores <- detectCores()
+  cl <- makeCluster(cores[1]-1)
+  registerDoParallel(cl)
+  
+  # Discontinuous 4mer
+  pairs.disc.4mer.ctrl <- foreach(j = 1:length(top.disc.fourmers$nmer), .combine = rbind) %dopar% {
+    source("neals_tcr_functions.R")
+    data = find_pairs_disc(top.disc.fourmers$nmer[j], random.CDR3s,
+                           CDR3.col = "CDR3.amino.acid.sequence", motif.size = 4)
+    data
+  }
+  stopCluster(cl)
+  remove(cores); remove(cl)
+  
+  # Set cores for parallel processing
+  cores <- detectCores()
+  cl <- makeCluster(cores[1]-1)
+  registerDoParallel(cl)
+  
+  pairs.disc.5mer.ctrl <- foreach(j = 1:length(top.disc.fivemers$nmer), .combine = rbind) %dopar% {
+    source("neals_tcr_functions.R")
+    data = find_pairs_disc(top.disc.fivemers$nmer[j], random.CDR3s,
+                           CDR3.col = "CDR3.amino.acid.sequence", motif.size = 5)
+    data
+  }
+  stopCluster(cl)
+  remove(cores); remove(cl)
+  
+  # Set cores for parallel processing
+  cores <- detectCores()
+  cl <- makeCluster(cores[1]-1)
+  registerDoParallel(cl)
+  
+  # Get pairs for dominant 3mers
+  pairs.threemers.ctrl <- foreach(j = 1:length(top.nmers$threemer$nmer), .combine = rbind) %dopar% {
+    source("neals_tcr_functions.R") 
+    data = find_pairs_cont(top.nmers$threemer$nmer[j], random.CDR3s,
+                           CDR3.col = "CDR3.amino.acid.sequence")
+    data
+  }
+  stopCluster(cl)
+  remove(cores); remove(cl)
+  
+  # Set cores for parallel processing
+  cores <- detectCores()
+  cl <- makeCluster(cores[1]-1)
+  registerDoParallel(cl)
+  
+  # Get pairs for dominant 4mers
+  pairs.fourmers.ctrl <- foreach(j = 1:length(top.nmers$fourmer$nmer), .combine = rbind) %dopar% {
+    source("neals_tcr_functions.R") 
+    data = find_pairs_cont(top.nmers$fourmer$nmer[j], random.CDR3s,
+                           CDR3.col = "CDR3.amino.acid.sequence")
+    data
+  }
+  stopCluster(cl)
+  remove(cores); remove(cl)
+  
+  # Set cores for parallel processing
+  cores <- detectCores()
+  cl <- makeCluster(cores[1]-1)
+  registerDoParallel(cl)
+  
+  # Get pairs for dominant 5mers
+  pairs.fivemers.ctrl <- foreach(j = 1:length(top.nmers$fivemer$nmer), .combine = rbind) %dopar% {
+    source("neals_tcr_functions.R") 
+    data = find_pairs_cont(top.nmers$fivemer$nmer[j], random.CDR3s,
+                           CDR3.col = "CDR3.amino.acid.sequence")
+    data
+  }
+  stopCluster(cl)
+  remove(cores); remove(cl)
+  
+  # Add all of the pairs
+  pairs.ctrl <- rbind(pairs.lev.ctrl, pairs.disc.4mer.ctrl, pairs.disc.5mer.ctrl, pairs.threemers.ctrl,
+                      pairs.fourmers.ctrl, pairs.fivemers.ctrl)
+  
+  # Limit to unique edges
+  pairs.ctrl <- unique(pairs.ctrl)
+  # Make the columns character vectors
+  pairs.ctrl$from.cdr3 <- as.character(pairs.ctrl$from.cdr3)
+  pairs.ctrl$to.cdr3 <- as.character(pairs.ctrl$to.cdr3)
+  
+  # Get rid of any self-edges
+  pairs.ctrl <- pairs.ctrl[!pairs.ctrl$from.cdr3 == pairs.ctrl$to.cdr3,]
+  
+  # Create self-edges for CDR3s with multiple nucleotide sequences in enriched
+  # Get all CDR3s in the network
+  net.CDR3s.ctrl <- unique(c(pairs.ctrl$from.cdr3, pairs.ctrl$to.cdr3))
+  
+  # Create a new self edge for every unique nucleotide sequence for an enriched CDR3
+  self.edges.ctrl <- lapply(net.CDR3s.ctrl, function(x){
+    info <- random.CDR3s[random.CDR3s$CDR3.amino.acid.sequence == x,]
+    nucleotide.count <- length(unique(info$CDR3.nucleotide.sequence))
+    df <- data.frame("from.cdr3" = rep(x, nucleotide.count - 1),
+                     "to.cdr3" = rep(x, nucleotide.count - 1))
+    
+    return(df)
+  }) %>% do.call(rbind, .)
+  
+  pairs.ctrl <- rbind(pairs.ctrl, self.edges.ctrl)
+  
+  
+  neg.edges.vec[i] <- nrow(pairs.ctrl)
+})
 
 # Resample unselected CD154 positive data in the same amount as enriched data and look at edges
 pos.edges.vec <- vector(mode = "numeric", length = 50)
