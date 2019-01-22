@@ -205,6 +205,39 @@ disc.4mers <- function(df, CDR3.col, count.col){
   return(combo.df)
 }
 
+disc.5mers <- function(df, CDR3.col, count.col){
+  # Exclude CDR3s that are too short
+  CDR3.df <- df[nchar(df[[CDR3.col]]) >= 11,]
+  
+  # Iterate through the CDR3s
+  motifs <- apply(CDR3.df, 1, function(x){
+    # Trim the CDR3
+    trimmed.CDR3 <- substr(x[[CDR3.col]], 4, nchar(x[[CDR3.col]]) - 3)
+    # Make an empty vector
+    combos <- c()
+    # Loop across a CDR3 and get all possible discontinuous 3mers
+    for(i in 1:(nchar(trimmed.CDR3) - 4)){
+      comb.1 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 4), sep = "")
+      comb.2 <- paste(substr(trimmed.CDR3, i, i + 1), "X", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
+      comb.3 <- paste(substr(trimmed.CDR3, i, i + 2), "X", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+      comb.4 <- paste(substr(trimmed.CDR3, i, i), "XX", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
+      comb.5 <- paste(substr(trimmed.CDR3, i, i + 1), "XX", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+      comb.6 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 2), "X",
+                      substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+      combos <- c(combos, comb.1, comb.2, comb.3, comb.4, comb.5, comb.6)
+    }
+    # Only count a discontinuous motif once per CDR3
+    combos <- unique(combos)
+    # Get the counts of the CDR3 where these nmers were derived
+    counts <- as.integer(x[[count.col]])
+    return(data.frame("nmer" = combos, "unique.CDR3s" = 1, "count" = counts))
+  })
+  #combo.df <- data.frame("nmer" = unlist(motifs, use.names = FALSE), "unique.CDR3s" = 1)
+  combo.df <- do.call(rbind, motifs)
+  combo.df <- aggregate(. ~ nmer, data = combo.df, sum)
+  return(combo.df)
+}
+
 unique.people.discontinuous <- function(nmer, df, CDR3.col, id.col, motif.size){
   if(motif.size == 4){
     # Get rid of CDR3s that are too short to contribute
@@ -358,67 +391,66 @@ find_pairs_cont <- function(nmer, df, CDR3.col){
   }
 }
 
-disc.5mers <- function(df, CDR3.col, count.col){
-  # Exclude CDR3s that are too short
-  CDR3.df <- df[nchar(df[[CDR3.col]]) >= 11,]
-  CDR3.df <- data.frame("CDR3" = CDR3.df[[CDR3.col]],
-                        "count"= CDR3.df[[count.col]], stringsAsFactors = FALSE)
-  CDR3.df <- aggregate(. ~ CDR3, data = CDR3.df, sum)
-  # Iterate through the CDR3s
-  motifs <- apply(CDR3.df, 1, function(x){
-    # Trim the CDR3
-    trimmed.CDR3 <- substr(x[["CDR3"]], 4, nchar(x[["CDR3"]]) - 3)
-    # Make an empty vector
-    combos <- c()
-    # Loop across a CDR3 and get all possible discontinuous 3mers
-    for(i in 1:(nchar(trimmed.CDR3) - 4)){
-      comb.1 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 4), sep = "")
-      comb.2 <- paste(substr(trimmed.CDR3, i, i + 1), "X", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
-      comb.3 <- paste(substr(trimmed.CDR3, i, i + 2), "X", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
-      comb.4 <- paste(substr(trimmed.CDR3, i, i), "XX", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
-      comb.5 <- paste(substr(trimmed.CDR3, i, i + 1), "XX", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
-      comb.6 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 2), "X",
-                      substr(trimmed.CDR3, i + 4, i + 4), sep = "")
-      combos <- c(combos, comb.1, comb.2, comb.3, comb.4, comb.5, comb.6)
-    }
-    # Only count a discontinuous motif once per CDR3
-    combos <- unique(combos)
-    # Get the counts of the CDR3 where these nmers were derived
-    counts <- as.integer(x[["count"]])
-    return(data.frame("nmer" = combos, "unique.CDR3s" = 1, "count" = counts))
-  })
-  #combo.df <- data.frame("nmer" = unlist(motifs, use.names = FALSE), "unique.CDR3s" = 1)
-  combo.df <- do.call(rbind, motifs)
-  combo.df <- aggregate(. ~ nmer, data = combo.df, sum)
-  return(combo.df)
-}
 
 
 # Function that will return CDR3s with a particular discontinuous nmer
-find_disc <- function(nmer, CDR3s){
-  # Get rid of CDR3s that are too short to contribute
-  CDR3s <- CDR3s[nchar(CDR3s) >= 10]
-  # Iterate across the CDR3s looking for which ones have an nmer
-  CDR3s <- sapply(CDR3s, function(x){
-    # Trim the CDR3
-    trimmed.CDR3 <- substr(x, 4, nchar(x) - 3)
-    # Make an empty vector
-    combos <- c()
-    # Loop across a CDR3 and get all possible discontinuous 3mers
-    for(i in 1:(nchar(trimmed.CDR3) - 3)){
-      comb.1 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 3), sep = "")
-      comb.2 <- paste(substr(trimmed.CDR3, i, i + 1), "X", substr(trimmed.CDR3, i + 3, i + 3), sep = "")
-      combos <- c(combos, comb.1, comb.2)
-    }
-    # Only count a discontinuous motif once per CDR3
-    combos <- unique(combos)
-    if(nmer %in% combos){
-      return(x)
-    }
-  })
-  CDR3s <- as.character(Filter(Negate(is.null), CDR3s))
-  
-  return(CDR3s)
+find_disc <- function(nmer, CDR3s, motif.length){
+  if(motif.length == 4){
+    # Get rid of CDR3s that are too short to contribute
+    CDR3s <- CDR3s[nchar(CDR3s) >= 10]
+    # Iterate across the CDR3s looking for which ones have an nmer
+    CDR3s <- sapply(CDR3s, function(x){
+      # Trim the CDR3
+      trimmed.CDR3 <- substr(x, 4, nchar(x) - 3)
+      # Make an empty vector
+      combos <- c()
+      # Loop across a CDR3 and get all possible discontinuous 3mers
+      for(i in 1:(nchar(trimmed.CDR3) - 3)){
+        comb.1 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 3), sep = "")
+        comb.2 <- paste(substr(trimmed.CDR3, i, i + 1), "X", substr(trimmed.CDR3, i + 3, i + 3), sep = "")
+        combos <- c(combos, comb.1, comb.2)
+      }
+      # Only count a discontinuous motif once per CDR3
+      combos <- unique(combos)
+      if(nmer %in% combos){
+        return(x)
+      }
+    })
+    CDR3s <- as.character(Filter(Negate(is.null), CDR3s))
+    
+    return(CDR3s)
+  }
+  if(motif.length == 5){
+    # Get rid of CDR3s that are too short to contribute
+    CDR3s <- CDR3s[nchar(CDR3s) >= 11]
+    
+    # Iterate across the CDR3s looking for which ones have an nmer
+    CDR3s <- sapply(CDR3s, function(x){
+      # Trim the CDR3
+      trimmed.CDR3 <- substr(x, 4, nchar(x) - 3)
+      # Make an empty vector
+      combos <- c()
+      # Loop across a CDR3 and get all possible discontinuous 3mers
+      for(i in 1:(nchar(trimmed.CDR3) - 3)){
+        comb.1 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 4), sep = "")
+        comb.2 <- paste(substr(trimmed.CDR3, i, i + 1), "X", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
+        comb.3 <- paste(substr(trimmed.CDR3, i, i + 2), "X", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+        comb.4 <- paste(substr(trimmed.CDR3, i, i), "XX", substr(trimmed.CDR3, i + 3, i + 4), sep = "")
+        comb.5 <- paste(substr(trimmed.CDR3, i, i + 1), "XX", substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+        comb.6 <- paste(substr(trimmed.CDR3, i, i), "X", substr(trimmed.CDR3, i + 2, i + 2), "X",
+                        substr(trimmed.CDR3, i + 4, i + 4), sep = "")
+        combos <- c(combos, comb.1, comb.2, comb.3, comb.4, comb.5, comb.6)
+      }
+      # Only count a discontinuous motif once per CDR3
+      combos <- unique(combos)
+      if(nmer %in% combos){
+        return(x)
+      }
+    })
+    CDR3s <- as.character(Filter(Negate(is.null), CDR3s))
+    return(CDR3s)
+    
+  }
 }
 
 # Needed for next function
