@@ -228,6 +228,38 @@ ggplot(data = motif.pos$fivemer, aes(unique.people)) + geom_histogram(bins = 17)
   theme_bw()
 dev.off()
 
+
+# Make plots looking at enrichment vs. unique people
+pdf(paste(fig.file.path, "nmer.plots.by.enrichment.pdf", sep = "/"), 10, 7)
+ggplot(data = motif.pos$fourmer, aes(x = unique.people, y = log(enrichment))) + 
+  geom_jitter(data = motif.pos$fourmer[!motif.pos$fourmer$unique.CDR3s >= 3 |
+                                         ! motif.pos$fourmer$unique.people >=3 |
+                                         ! motif.pos$fourmer$enrichment >= 10,], color = "grey", size = 1) +
+  geom_jitter(data = motif.pos$fourmer[motif.pos$fourmer$unique.CDR3s >= 3 &
+                                         motif.pos$fourmer$unique.people >=3 &
+                                         motif.pos$fourmer$enrichment >= 10,], color = "red", aes(size = unique.CDR3s)) +
+  scale_size_continuous(range = c(2,6)) +
+  geom_text_repel(data = motif.pos$fourmer[motif.pos$fourmer$unique.CDR3s >= 3 &
+                                             motif.pos$fourmer$unique.people >=3 &
+                                             motif.pos$fourmer$enrichment >= 10,], aes(label = nmer)) +
+  xlab("Unique subjects") + ylab("Log(enrichment)") +
+  theme_bw()
+
+ggplot(data = motif.pos$fivemer, aes(x = unique.people, y = log(enrichment))) + 
+  geom_jitter(data = motif.pos$fivemer[!motif.pos$fivemer$unique.CDR3s >= 3 |
+                                         ! motif.pos$fivemer$unique.people >=3 |
+                                         ! motif.pos$fivemer$enrichment >= 10,], color = "grey", size = 1) +
+  geom_jitter(data = motif.pos$fivemer[motif.pos$fivemer$unique.CDR3s >= 3 &
+                                         motif.pos$fivemer$unique.people >=3 &
+                                         motif.pos$fivemer$enrichment >= 10,], color = "red", aes(size = unique.CDR3s)) +
+  scale_size_continuous(range = c(2,6)) +
+  geom_text_repel(data = motif.pos$fivemer[motif.pos$fivemer$unique.CDR3s >= 3 &
+                                             motif.pos$fivemer$unique.people >=3 &
+                                             motif.pos$fivemer$enrichment >= 10,], aes(label = nmer)) +
+  xlab("Unique subjects") + ylab("Log(enrichment)") +
+  theme_bw()
+dev.off()
+
 # Look at motifs in all CD154+ vs. Cd154-
 
 # Get all CD154+ data
@@ -303,25 +335,25 @@ dev.off()
 
 
 # Based on these distributions, make cutoffs and see what percentile they represent
-top.threemer <- motif.pos$threemer[motif.pos$threemer$unique.CDR3s >= 2 & 
-                          motif.pos$threemer$enrichment >= 3 &
-                          motif.pos$threemer$unique.people >=2,]
+top.threemer <- motif.pos$threemer[motif.pos$threemer$unique.CDR3s >= 3 & 
+                          motif.pos$threemer$enrichment >= 10 &
+                          motif.pos$threemer$unique.people >=3,]
 
 # Determine percentile of total 3mers this is
 nrow(top.threemer) / nrow(motif.pos$threemer)
 
 # Based on these distributions, make cutoffs and see what percentile they represent
-top.fourmer <- motif.pos$fourmer[motif.pos$fourmer$unique.CDR3s >= 2 & 
-                                     motif.pos$fourmer$enrichment >= 3 &
-                                     motif.pos$fourmer$unique.people >=2,]
+top.fourmer <- motif.pos$fourmer[motif.pos$fourmer$unique.CDR3s >= 3 & 
+                                     motif.pos$fourmer$enrichment >= 10 &
+                                     motif.pos$fourmer$unique.people >=3,]
 # Determine percentile
 nrow(top.fourmer) / nrow(motif.pos$fourmer)
 
 
 # Based on these distributions, make cutoffs and see what percentile they represent
-top.fivemer <- motif.pos$fivemer[motif.pos$fivemer$unique.CDR3s >= 2 & 
-                                   motif.pos$fivemer$enrichment >= 3 &
-                                   motif.pos$fivemer$unique.people >=2,]
+top.fivemer <- motif.pos$fivemer[motif.pos$fivemer$unique.CDR3s >= 3 & 
+                                   motif.pos$fivemer$enrichment >= 10 &
+                                   motif.pos$fivemer$unique.people >=3,]
 # Determine percentile
 nrow(top.fivemer) / nrow(motif.pos$fivemer)
 
