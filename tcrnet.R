@@ -194,7 +194,7 @@ cores <- detectCores()
 cl <- makeCluster(cores[1]-1)
 registerDoParallel(cl)
 
-system.time(neighbors.neg <- foreach(i = 1:length(net.CDR3s), .combine = c) %dopar%{
+neighbors.neg <- foreach(i = 1:length(net.CDR3s), .combine = c) %dopar%{
   library(stringdist)
   neighbor.fun <- function(x){
     # Determine number of neighbors by homology
@@ -241,7 +241,7 @@ system.time(neighbors.neg <- foreach(i = 1:length(net.CDR3s), .combine = c) %dop
         for(i in 1:length(top.disc.fourmers$nmer)){
           # Find which top nmers it has
           if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
-            CDR3.match <- find_disc(top.disc.fourmers$nmer[i], neg.parse.aggr$CDR3.amino.acid.sequence, motif.length = 4)
+            CDR3.match <- find_disc(top.disc.fourmers$nmer[i], neg.parse$CDR3.amino.acid.sequence, motif.length = 4)
             
             disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
           }
@@ -295,7 +295,7 @@ system.time(neighbors.neg <- foreach(i = 1:length(net.CDR3s), .combine = c) %dop
   }
   neighbors <- neighbor.fun(net.CDR3s[i]) # searching for neighbors of the CDR3's of interest within the CD154-; could aslo do this with some other control data set(s)
   neighbors
-})
+}
 stopCluster(cl)
 remove(cores);remove(cl)
 
@@ -345,29 +345,67 @@ get.neighbors <- function(x){
 
   # Determine number of edges by discontinuous motifs
   # Get all discontinuous 4mers
-  disc.fourmers <- disc.3mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
-                               CDR3.col = "CDR3", count.col = "count")
-  # Determine if any are in our list of top discontinuous 4mers
-  if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
-    disc.CDR3s <- c()
-    # If there is the presence of a disc nmer, loop through the top nmers
-    for(i in 1:length(top.disc.fourmers$nmer)){
-      # Find which top nmers it has
-      if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
-        CDR3.match <- find_disc(top.disc.fourmers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence)
-
-        disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+  if(nchar(x) >= 10){
+    disc.fourmers <- disc.4mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+                                CDR3.col = "CDR3", count.col = "count")
+    # Determine if any are in our list of top discontinuous 4mers
+    if(any(disc.fourmers$nmer %in% top.disc.fourmers$nmer)){
+      disc.CDR3s <- c()
+      # If there is the presence of a disc nmer, loop through the top nmers
+      for(i in 1:length(top.disc.fourmers$nmer)){
+        # Find which top nmers it has
+        if(top.disc.fourmers$nmer[i] %in% disc.fourmers$nmer){
+          CDR3.match <- find_disc(top.disc.fourmers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence, motif.length = 4)
+          
+          disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+        }
       }
+      
+      # Combine discontinuous matches to CDR3 vector
+      neighbors <- c(neighbors, disc.CDR3s)
     }
-
-    # Combine discontinuous matches to CDR3 vector
-    neighbors <- c(neighbors, disc.CDR3s)
   }
+  if(nchar(x) >= 11){
+    # Get all discontinuous 4mers
+    disc.fivemers <- disc.5mers(data.frame(CDR3 = x, count = 1, stringsAsFactors = FALSE),
+                                CDR3.col = "CDR3", count.col = "count")
+    # Determine if any are in our list of top discontinuous 4mers
+    if(any(disc.fivemers$nmer %in% top.disc.fivemers$nmer)){
+      disc.CDR3s <- c()
+      # If there is the presence of a disc nmer, loop through the top nmers
+      for(i in 1:length(top.disc.fivemers$nmer)){
+        # Find which top nmers it has
+        if(top.disc.fivemers$nmer[i] %in% disc.fivemers$nmer){
+          CDR3.match <- find_disc(top.disc.fivemers$nmer[i],pos.parse.aggr$CDR3.amino.acid.sequence, motif.length = 5)
+          
+          disc.CDR3s <- c(disc.CDR3s, CDR3.match[!CDR3.match %in% disc.CDR3s])
+        }
+        # Combine discontinuous matches to CDR3 vector
+        neighbors <- c(neighbors, disc.CDR3s)
+      }
+      # Combine discontinuous matches to CDR3 vector
+      neighbors <- c(neighbors, disc.CDR3s)
+    }
+  }
+  
   return(unique(neighbors))
 }
 
 # Get the CDR3s of neighborhoods of interest
 core.neighborhoods <- lapply(core.CDR3s, get.neighbors)
+
+# Set cores for parallel processing
+cores <- detectCores()
+cl <- makeCluster(cores[1]-1)
+registerDoParallel(cl)
+core.neighborhoods <- foreach(i = 1:length(core.CDR3s)) %dopar% {
+  library(stringdist)
+  data <- get.neighbors(core.CDR3s[i])
+  data
+}
+stopCluster(cl)
+remove(cores);remove(cl)
+names(core.neighborhoods) <- core.CDR3s
 
 # Save this to be used to probe Teff and Treg compartments
 save(core.neighborhoods, file = paste(raw.file.path, "top.neighborhoods.rda", sep = "/"))
