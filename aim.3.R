@@ -8,7 +8,9 @@ library(ggrepel)
 library(magrittr)
 library(data.table)
 library(igraph)
+library(gplots)
 source("tcR_functions.R") #includes several modifications to tcR
+source("neals_tcr_functions.R")
 
 switch(Sys.info()[['user']],
        nealp = {fig.file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
@@ -22,13 +24,6 @@ switch(Sys.info()[['user']],
        stop("I don't recognize your username, type Sys.info() to find out what it is.")
 )
 
-switch(Sys.info()[['user']],
-       nealp = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       wayne1 = {neals.func.path = "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/neals_tcr_functions.R"},
-       ns580 = {neals.func.path = "~/data/neals_tcr_functions.R"},
-       stop("I don't recognize your username, type Sys.info() to find out what it is.")
-)
-source(neals.func.path)
 
 
 # Load in the data
@@ -69,13 +64,12 @@ treg.psCDR3 <- lapply(treg.parse, function(x){
 })
 
 # Need to get some basic stats about the Teff/Treg data
-### Note: Unique CDR3s here is by nucelotide, not AA ###
-subset.stats <- data.frame("tot.teff.CDR3s" = unlist(lapply(teff.parse, nrow)),
-                "tot.treg.CDR3s" = unlist(lapply(treg.parse, nrow)),
+subset.stats <- data.frame("tot.teff.CDR3s" = unlist(lapply(teff.parse, function(x) length(unique(x$CDR3.amino.acid.sequence)))),
+                "tot.treg.CDR3s" = unlist(lapply(treg.parse, function(x) length(unique(x$CDR3.amino.acid.sequence)))),
                 "tot.teff.reads" = unlist(lapply(teff.parse, function(x) sum(x$Read.count))),
                 "tot.treg.reads" = unlist(lapply(treg.parse, function(x) sum(x$Read.count))),
-                "psCDR3.teff" = unlist(lapply(teff.psCDR3, nrow)),
-                "psCDR3.treg" = unlist(lapply(treg.psCDR3, nrow)),
+                "psCDR3.teff" = unlist(lapply(teff.psCDR3, function(x) length(unique(x$CDR3.amino.acid.sequence)))),
+                "psCDR3.treg" = unlist(lapply(treg.psCDR3, function(x) length(unique(x$CDR3.amino.acid.sequence)))),
                 "psCDR3.teff.count" = unlist(lapply(teff.psCDR3, function(x) sum(x$Read.count))),
                 "psCDR3.treg.count" = unlist(lapply(treg.psCDR3, function(x) sum(x$Read.count))))
 
@@ -97,7 +91,129 @@ ggplot(plot.df, aes(x = variable, y = value)) + geom_boxplot(outlier.shape = NA)
   facet_wrap(~facet, scales = "free", labeller = as_labeller(c(read.count = "Read count", unique.CDR3s = "Unique CDR3s"))) +
   theme_bw(base_size = 15)
 dev.off()
+
+plot.df <- melt(subset.stats[c("tot.teff.CDR3s", "tot.treg.CDR3s", "tot.teff.reads", "tot.treg.reads")])
+plot.df$facet <- ifelse(grepl("reads", plot.df$variable), "read.count", "unique.CDR3s")
+
+pdf(paste(fig.file.path, "teff.treg.reads.pdf", sep = "/"), 10, 7)
+ggplot(plot.df, aes(x = variable, y = value)) + geom_boxplot(outlier.shape = NA) +
+  geom_point(position = position_jitter(width = 0.1)) +
+  ggtitle("subset sequences") +
+  scale_x_discrete(labels = c("Teff", "Treg")) + 
+  xlab("") + ylab("sequences") +
+  facet_wrap(~facet, scales = "free", labeller = as_labeller(c(read.count = "Read count", unique.CDR3s = "Unique CDR3s"))) +
+  theme_bw(base_size = 15)
+dev.off()
+
 write.csv(subset.stats, paste(fig.file.path, "subset.stats.csv", sep = "/"))
+
+
+### Look at psCDR3s in Teff and Treg data ###
+
+teff.psCDR3s.prop <- lapply(teff.parse, function(x){
+  psCDR3.prop <- lapply(unique(enriched.CDR3s.df$CDR3.amino.acid.sequence), function(y){
+    psCDR3 <- x[x$CDR3.amino.acid.sequence %in% as.character(y),]
+    prop <- sum(psCDR3$Read.count) / sum(x$Read.count)
+    return(prop)
+  })
+  return(psCDR3.prop)
+})
+
+# Create a dataframe with this data
+teff.psCDR3s.prop <- as.data.frame(matrix(unlist(teff.psCDR3s.prop), nrow = length(unlist(teff.psCDR3s.prop[1]))))
+colnames(teff.psCDR3s.prop) <- names(teff.parse)
+teff.psCDR3s.prop$psCDR3 <- unique(enriched.CDR3s.df$CDR3.amino.acid.sequence)
+teff.psCDR3s.prop <- select(teff.psCDR3s.prop, psCDR3, everything())
+
+# Determine the number of Teff samples that have a CDR3
+teff.psCDR3s.prop$samp.count.teff <- apply(teff.psCDR3s.prop[,2:ncol(teff.psCDR3s.prop)], 1, function(x) length(x[x != 0]))
+
+
+treg.psCDR3s.prop <- lapply(treg.parse, function(x){
+  psCDR3.prop <- lapply(unique(enriched.CDR3s.df$CDR3.amino.acid.sequence), function(y){
+    psCDR3 <- x[x$CDR3.amino.acid.sequence %in% as.character(y),]
+    prop <- sum(psCDR3$Read.count) / sum(x$Read.count)
+    return(prop)
+  })
+  return(psCDR3.prop)
+})
+
+# Create a dataframe with this data
+treg.psCDR3s.prop <- as.data.frame(matrix(unlist(treg.psCDR3s.prop), nrow = length(unlist(treg.psCDR3s.prop[1]))))
+colnames(treg.psCDR3s.prop) <- names(treg.parse)
+treg.psCDR3s.prop$psCDR3 <- unique(enriched.CDR3s.df$CDR3.amino.acid.sequence)
+treg.psCDR3s.prop <- select(treg.psCDR3s.prop, psCDR3, everything())
+
+# Determine the number of Treg samples that have a CDR3 
+treg.psCDR3s.prop$samp.count.treg <- apply(treg.psCDR3s.prop[,2:ncol(treg.psCDR3s.prop)], 1, function(x) length(x[x != 0]))
+
+
+# Join the Teff and Treg psCDR3 data
+psCDR3.prop.df <- left_join(teff.psCDR3s.prop, treg.psCDR3s.prop, by = "psCDR3") %>%
+  select(c("psCDR3", colnames(.)[grep("aTeff", colnames(.))],
+           colnames(.)[grep("iTreg", colnames(.))],
+           "samp.count.teff", "samp.count.treg"))
+
+# Get only public psCDR3s among single compartment
+psCDR3.prop.df.pub <- psCDR3.prop.df[psCDR3.prop.df$samp.count.teff > 1 | psCDR3.prop.df$samp.count.treg > 1,] %>%
+  arrange(samp.count.teff > 0 & samp.count.treg == 0) %>% arrange(samp.count.treg > 0 & samp.count.teff > 0) %>%
+  arrange(samp.count.teff == 0 & samp.count.treg > 0)
+
+
+
+# Get the rownames of the heatmap
+rownames <- psCDR3.prop.df.pub[,1]
+# Create a matrix for the heatmap
+mat_data <- data.matrix(psCDR3.prop.df.pub[,2:(ncol(psCDR3.prop.df) - 2)])  
+rownames(mat_data) <- rownames 
+# Create a color palette for the plot
+my_palette <- colorRampPalette(c("black", "black", "red"))(n = 1000)
+
+pdf(paste(fig.file.path, "public.psCDR3.heatmap.in.subsets.pdf", sep = "/"), 10, 5)
+heatmap.2(mat_data, scale = "row", tracecol=NA, Rowv = F, Colv = F, dendrogram = "none",
+          col = my_palette)
+dev.off()
+
+### Compare the Teff and Treg psCDR3s by BLAST algorithm ###
+# Combine the Teff/Treg psCDR3s
+teff.psCDR3.seqs <- lapply(teff.psCDR3, function(x){
+  select(x, CDR3.amino.acid.sequence)
+}) %>% do.call(rbind, .) %>% .$CDR3.amino.acid.sequence %>% unique()
+
+treg.psCDR3.seqs <- lapply(treg.psCDR3, function(x){
+  select(x, CDR3.amino.acid.sequence)
+}) %>% do.call(rbind, .) %>% .$CDR3.amino.acid.sequence %>% unique()
+
+subset.psCDR3.seqs <- c(teff.psCDR3.seqs, treg.psCDR3.seqs) %>% unique()
+
+# Determine their scores by BLAST algorithm using BLOSUM62 matrix
+blos.mtx <- matrix(nrow = length(subset.psCDR3.seqs), ncol = length(subset.psCDR3.seqs)) %>%
+  `rownames<-`(., subset.psCDR3.seqs)
+
+for(i in 1:length(subset.psCDR3.seqs)){
+  blos.mtx[,i] <- pairwiseAlignment(subset.psCDR3.seqs, subset.psCDR3.seqs[i], substitutionMatrix = "BLOSUM62")@score
+  
+}
+
+# Get the order of the sequences
+blos.seq.order <- hclust(dist(blos.mtx), method = "ward.D")$order
+
+blos.clust.df <- data.frame(psCDR3 = subset.psCDR3.seqs[blos.seq.order]) %>%
+  left_join(psCDR3.prop.df, by = "psCDR3")
+blos.clust.df$mean.teff <- rowMeans(select(blos.clust.df, grep("aTeff", colnames(blos.clust.df))))
+blos.clust.df$mean.treg <- rowMeans(select(blos.clust.df, grep("iTreg", colnames(blos.clust.df))))
+
+rownames <- rownames(blos.clust.df$psCDR3)
+mat_data <- data.matrix(select(blos.clust.df, grep("mean", colnames(blos.clust.df))))  
+rownames(mat_data) <- rownames 
+# Create a color palette for the plot
+my_palette <- colorRampPalette(c("blue", "yellow", "red"))(n = 1000)
+
+heatmap.2(mat_data, scale = "row", tracecol=NA, Rowv = F, Colv = F, dendrogram = "none",
+          col = my_palette)
+
+
+
 
 # Look for CDR3s of top neighborhoods in Teff
 teff.neighborhoods <- lapply(teff.parse, function(x){
@@ -162,42 +278,18 @@ my_palette <- colorRampPalette(c("black", "black", "red"))(n = 1000)
 
 # Create a heatmap where each row is scaled
 pdf(paste(fig.file.path, "neighborhood.heatmap.in.subsets.pdf", sep = "/"), 10, 5)
-heatmap.2(mat_data, scale = "row", tracecol=NA, dendrogram = "none", Rowv = FALSE, Colv = FALSE,
+heatmap.2(mat_data, scale = "row", tracecol=NA, dendrogram = "none", Colv = FALSE, Rowv = FALSE,
           col = my_palette)
 dev.off()
 
-# Notice interesting patters. Many neighborhoods restricted to a single compartment.  
-# Need to get sequences that contribute to this pattern
-
-teff.spec.nbrs <- neighborhood.df$neighborhood[neighborhood.df$samp.count.teff > 0 & neighborhood.df$samp.count.treg == 0]
-treg.spec.nbrs <- neighborhood.df$neighborhood[neighborhood.df$samp.count.treg > 0 & neighborhood.df$samp.count.teff == 0]
-
-# Get the sequences
-# Look for CDR3s of top neighborhoods in Teff
-teff.spec.seq <- lapply(teff.parse, function(x){
-  CDR3s <- unlist(core.neighborhoods[as.integer(teff.spec.nbrs)])
-  # Iterate through all of the neighborhoods
-  seqs <- x$CDR3.amino.acid.sequence[x$CDR3.amino.acid.sequence %in% CDR3s]
-  return(seqs)
-}) %>% unlist()
-
-treg.spec.seq <- lapply(treg.parse, function(x){
-  CDR3s <- unlist(core.neighborhoods[as.integer(treg.spec.nbrs)])
-  # Iterate through all of the neighborhoods
-  seqs <- x$CDR3.amino.acid.sequence[x$CDR3.amino.acid.sequence %in% CDR3s]
-  return(seqs)
-}) %>%  unlist()
 
 # Make a graph with the Teff/Treg information
 pairs.graph <- graph_from_data_frame(pairs)
 # Add in node attributes based on Teff or Treg presence
 pairs.graph <- igraph::as_data_frame(pairs.graph, what = "both")
-pairs.graph$vertices$subset <- apply(pairs.graph$vertices, 1, function(x){
-  subset <- ifelse(x[["name"]] %in% teff.spec.seq, "teff", ifelse(x[["name"]] %in% treg.spec.seq, "treg", "none"))
-})
 
 # Want to make less binary, determine if any are "skewed" to a subset
-pairs.graph$vertices$teff.to.treg <- unlist(lapply(pairs.graph$vertices$name, function(x){
+pairs.graph$vertices$subset.prop <- unlist(lapply(pairs.graph$vertices$name, function(x){
   teff.prop.mean <- mean(unlist(lapply(teff.parse, function(y){
     CDR3s <- y[y$CDR3.amino.acid.sequence == x,]
     prop <- sum(CDR3s$Read.count) / sum(y$Read.count)
@@ -208,39 +300,22 @@ pairs.graph$vertices$teff.to.treg <- unlist(lapply(pairs.graph$vertices$name, fu
     prop <- sum(CDR3s$Read.count) / sum(y$Read.count)
     return(prop)
   })))
-  prop <- teff.prop.mean / treg.prop.mean
-  if(is.nan(prop)){
-    return(0)
-  } else if(is.infinite(prop)) {
-    return(50)
-  } else{
-    return(prop)
-  }
-
-}))
-
-# Want to make less binary, determine if any are "skewed" to a subset
-pairs.graph$vertices$treg.to.teff <- unlist(lapply(pairs.graph$vertices$name, function(x){
-  teff.prop.mean <- mean(unlist(lapply(teff.parse, function(y){
-    CDR3s <- y[y$CDR3.amino.acid.sequence == x,]
-    prop <- sum(CDR3s$Read.count) / sum(y$Read.count)
-    return(prop)
-  })))
-  treg.prop.mean <- mean(unlist(lapply(treg.parse, function(y){
-    CDR3s <- y[y$CDR3.amino.acid.sequence == x,]
-    prop <- sum(CDR3s$Read.count) / sum(y$Read.count)
-    return(prop)
-  })))
-  prop <- treg.prop.mean / teff.prop.mean
-  if(is.nan(prop)){
-    return(0)
-  } else if(is.infinite(prop)) {
-    return(50)
-  } else{
-    return(prop)
-  }
   
+  # Log adjust to make it a more reasonable scale
+  prop.log <- log(teff.prop.mean / treg.prop.mean)
+  if(is.nan(prop.log)){
+    return(0)
+  } else if(prop.log == "Inf") {
+    return(log(50))
+  } else if (prop.log == "-Inf"){
+    return(log(0.02))
+  } else{
+    return(prop.log)
+  }
+
 }))
+
+pairs.graph$vertices$subset.prop <- pairs.graph$vertices$subset.prop + 10.01
 
 # Re-make the graph with the newly added attributes
 pairs.graph <- graph_from_data_frame(pairs.graph$edges,
