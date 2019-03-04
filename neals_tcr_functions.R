@@ -391,11 +391,17 @@ find_pairs_cont <- function(nmer, df, CDR3.col){
   }
 }
 
+# Get pairs based on continuous nmers
+find_cont <- function(nmer, df, CDR3.col){
+  # Iterate across the CDR3s looking for which ones have an nmer
+  CDR3s <- df[[CDR3.col]][grepl(nmer, substr(df[[CDR3.col]], 4, nchar(df[[CDR3.col]]) - 3))]
+  return(CDR3s)
+}
 
 
 # Function that will return CDR3s with a particular discontinuous nmer
-find_disc <- function(nmer, CDR3s, motif.length){
-  if(motif.length == 4){
+find_disc <- function(nmer, CDR3s){
+  if(nchar(nmer) == 4){
     # Get rid of CDR3s that are too short to contribute
     CDR3s <- CDR3s[nchar(CDR3s) >= 10]
     # Iterate across the CDR3s looking for which ones have an nmer
@@ -420,7 +426,7 @@ find_disc <- function(nmer, CDR3s, motif.length){
     
     return(CDR3s)
   }
-  if(motif.length == 5){
+  if(nchar(nmer) == 5){
     # Get rid of CDR3s that are too short to contribute
     CDR3s <- CDR3s[nchar(CDR3s) >= 11]
     
