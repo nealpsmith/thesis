@@ -85,11 +85,11 @@ chi_square <- function(df, x, y){
 }
 
 # Function to calculate hamming distance of a vector of CDR3 sequences
-# CDR3s = character vector of CDR3s
-CDR3_ham <- function(CDR3s){
+# CDR3s = character vector of CDR3s, method is either hamming or levenshtein
+CDR3_dist <- function(CDR3s, method){
     library(stringdist)
     ham.table <- lapply(seq_along(CDR3s), function(x){
-        min(stringdist(CDR3s[x], CDR3s[-x], method = "hamming"))
+        min(stringdist(CDR3s[x], CDR3s[-x], method = method))
     }) %>% unlist(., use.names = FALSE) %>% table(.) %>%
         as.data.frame(.) %>%
         transform(., percent = Freq / length(CDR3s) * 100)
