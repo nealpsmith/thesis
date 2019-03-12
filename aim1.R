@@ -80,6 +80,77 @@ save(enriched.CDR3s, file = paste(raw.file.path, "neals.thesis.data/enriched.CDR
 
 enriched.CDR3.df <- do.call(rbind, enriched.CDR3s)
 
+# Create a dataframe with general information
+info.df <- data.frame(id = names(enriched.CDR3s),
+                resting.CDR3nuc = unlist(lapply(data.parse[grep("neg", names(data.parse))], nrow)),
+                resting.CDR3AA = unlist(lapply(data.parse[grep("neg", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))})),
+                activated.CDR3nuc = unlist(lapply(data.parse[grep("pos", names(data.parse))], nrow)),
+                activated.CDR3AA = unlist(lapply(data.parse[grep("pos", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))
+                })),
+                psCDR3nuc = unlist(lapply(grep("pos", names(data.parse), value = TRUE), function(x){
+                  nrow(data.parse[[x]][data.parse[[x]]$CDR3.amino.acid.sequence %in% 
+                                         enriched.CDR3s[[gsub("([0-9]+).*$", "\\1", x)]]$CDR3.amino.acid.sequence,])
+                })),
+                psCDR3AA = unlist(lapply(enriched.CDR3s, nrow))
+                )
+info.df$psCDR3nuc.perc.act <- (info.df$psCDR3nuc / info.df$activated.CDR3nuc) * 100
+info.df$psCDR3AA.perc.act <- (info.df$psCDR3AA / info.df$activated.CDR3AA) * 100
+
+write.csv(info.df,paste(fig.file.path, "basic.counts.csv", sep = "/"))
+#Plot this basic info
+plot.df <- melt(info.df, id.vars = "id")
+
+pdf(paste(fig.file.path, "basic.count.plots.pdf", sep = "/"), 7, 7)
+ggplot(plot.df[grep("resting", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("Resting CDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[grep("activated", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("activated CDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[plot.df$variable == "psCDR3nuc" | plot.df$variable == "psCDR3AA",], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("psCDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[grep("perc.act", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("percent of activated CDR3s") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("percent of activated CDR3s that are psCDR3s") +
+  theme_bw(base_size = 20)
+dev.off()
+
+# Need to determine the percent of the entire memory pool
+# For each person, determine the number of unique sequences that make up their entire memory pool (CD154+ and CD154-)
+unique.CDR3s.mem <- split(data.parse, sub("_[^_]+$", "", names(data.parse))) %>%
+  # Get just the amino acid sequences
+  lapply(., function(x) lapply(x, function(y){
+    y <- select(y, CDR3.amino.acid.sequence, CDR3.nucleotide.sequence)
+  }) %>% do.call(rbind, .)) %>%
+  # Determine number of unique sequences between both the activated and resting comartments
+  lapply(., function(x) c(length(unique(x$CDR3.amino.acid.sequence)), length(unique(x$CDR3.nucleotide.sequence))))
+
+memT.df <- data.frame(id = names(unique.CDR3s.mem),
+                      tot.AA = sapply(unique.CDR3s.mem, '[[', 1),
+                      tot.nuc = sapply(unique.CDR3s.mem, '[[', 2))
+memT.df <- left_join(memT.df, select(info.df, id, psCDR3AA, psCDR3nuc), by = "id")
+memT.df$perc.nuc <- (memT.df$psCDR3nuc / memT.df$tot.AA) * 100
+memT.df$perc.AA <- (memT.df$psCDR3AA / memT.df$tot.AA) * 100
+memT.df <- melt(memT.df, id.vars = "id")
+
+pdf(paste(fig.file.path, "perc.psCDR3.of.memory.pdf", sep = "/"), 7, 7)
+ggplot(memT.df[grep("perc", memT.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("percent of memory CDR3s") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("percent of memory CDR3s that are psCDR3s") +
+  theme_bw(base_size = 20)
+dev.off()
+
 # Hamming analysis
 # Perform hamming on entire list of peanut CDR3s
 min.ham <- CDR3_ham(enriched.CDR3.df$CDR3.amino.acid.sequence)
@@ -140,6 +211,8 @@ min.ham.melt <- melt(min.ham, id.vars = "distance")
 min.ham.melt$distance <- as.integer(min.ham.melt$distance)
 min.ham.melt <- min.ham.melt[min.ham.melt$distance <=15,] %>%
   cbind(., sd)
+
+write.csv(min.ham.melt, paste(fig.file.path, "hamming.distance.data.csv", sep = "/"))
 
 pdf(paste(fig.file.path, "hamming.distance.peanut.CDR3s.pdf", sep = "/"), 10, 7)
 ggplot(min.ham.melt, aes(x = distance, y = value, fill = variable, width = .80)) +
@@ -284,7 +357,7 @@ plot.df <- data.frame(id = names(enrich.split.bind.entr),
   select(., c(1,3,4,2)) %>%
   melt(id.var = "id")
 
-
+write.csv(plot.df, paste(fig.file.path, "shannon.entropy.data.csv", sep = "/"))
 # Plot the data
 pdf(paste(fig.file.path, "shannons.index.with.CD154.pos.pdf", sep = "/"), 7, 7)
 ggplot(plot.df, aes(x = variable, y = value, group = id)) + geom_line(size = 1) +

@@ -1,0 +1,203 @@
+---
+title: "R Notebook"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+
+This is a notebook for the examination of CDR3s in the repertoire of peanut allergic individuals
+
+Load in packages and the raw data
+```{r}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(magrittr)
+library(dplyr)
+
+switch(Sys.info()[['user']],
+       nealp = {file.path <- "C:/Users/nealp/Dropbox (Personal)/Extension School/Thesis/figures"
+       raw.file.path <- "C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+       wayne1 = {file.path <- "~/Dropbox (Personal)/Extension School/Thesis/figures"
+       raw.file.path <- "~/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data"},
+        stop("I don't recognize your username, type Sys.info() to find out what it is.")
+)
+source("neals_tcr_functions.R")
+
+# Load in the raw data
+load(paste(raw.file.path, "neals.thesis.data/parsed.data.baseline.rda", sep = "/"))
+load(paste(raw.file.path, "neals.thesis.data/enriched.CDR3s.rda", sep = "/"))
+
+# Make a dataframe for the enriched CDR3s
+enriched.CDR3.df <- do.call(rbind, enriched.CDR3s)
+
+```
+
+First we wanted to look at overall sequences in our dataset.  
+```{r}
+# Create a dataframe with general information
+info.df <- data.frame(id = names(enriched.CDR3s),
+                resting.CDR3nuc = unlist(lapply(data.parse[grep("neg", names(data.parse))], nrow)),
+                resting.CDR3AA = unlist(lapply(data.parse[grep("neg", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))})),
+                activated.CDR3nuc = unlist(lapply(data.parse[grep("pos", names(data.parse))], nrow)),
+                activated.CDR3AA = unlist(lapply(data.parse[grep("pos", names(data.parse))], function(x){
+                  length(unique(x$CDR3.amino.acid.sequence))
+                })),
+                psCDR3nuc = unlist(lapply(grep("pos", names(data.parse), value = TRUE), function(x){
+                  nrow(data.parse[[x]][data.parse[[x]]$CDR3.amino.acid.sequence %in% 
+                                         enriched.CDR3s[[gsub("([0-9]+).*$", "\\1", x)]]$CDR3.amino.acid.sequence,])
+                })),
+                psCDR3AA = unlist(lapply(enriched.CDR3s, nrow))
+                )
+info.df$psCDR3nuc.perc.act <- (info.df$psCDR3nuc / info.df$activated.CDR3nuc) * 100
+info.df$psCDR3AA.perc.act <- (info.df$psCDR3AA / info.df$activated.CDR3AA) * 100
+
+plot.df <- melt(info.df, id.vars = "id")
+
+plt.1 <- ggplot(plot.df[grep("resting", plot.df$variable),], aes(x = variable, y = value)) +
+  geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("Resting CDR3s") +
+  theme_bw()
+plt.2 <- ggplot(plot.df[grep("activated", plot.df$variable),], aes(x = variable, y = value)) +
+  geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("activated CDR3s") +
+  theme_bw()
+grid.arrange(plt.1, plt.2, ncol = 2)
+
+ggplot(plot.df[plot.df$variable == "psCDR3nuc" | plot.df$variable == "psCDR3AA",], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("sequences") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("psCDR3s") +
+  theme_bw(base_size = 15)
+ggplot(plot.df[grep("perc.act", plot.df$variable),], aes(x = variable, y = value)) + geom_boxplot() +
+  ylab("percent of activated CDR3s") + xlab("") +
+  scale_x_discrete(labels = c("CDR3 nucleotide sequences", "CDR3 AA sequences")) +
+  ggtitle("percent of activated CDR3s that are psCDR3s") +
+  theme_bw(base_size = 20)
+
+```
+
+Here we can see that our statistical enrichment selects only ~15% of the total activated compartment, indicating the stringency with which it selects sequences
+
+
+```{r hamming}
+# Perform hamming on entire list of peanut CDR3s
+min.ham <- CDR3_dist(enriched.CDR3.df$CDR3.amino.acid.sequence, method = "hamming")
+min.lev <- CDR3_dist(enriched.CDR3.df$CDR3.amino.acid.sequence, method = "lv")
+# Create a list of all of the CDR3s from CD154- to be used as a control
+rest.CDR3s <- lapply(data.parse[grep("neg",names(data.parse))], function(x){
+  x <- unique(x$CDR3.amino.acid.sequence)
+}) %>% unlist(., use.names = FALSE)
+
+# Get hamming distance on all CD154+ and CD154-
+neg.ham.df <- data.frame(distance = 0:20)
+neg.lev.df <- data.frame(distance = 0:20)
+
+for(i in 1:100){
+  sample <- sample(rest.CDR3s, nrow(enriched.CDR3.df))
+  neg.ham <- CDR3_dist(sample, "hamming")
+  neg.lev <- CDR3_dist(sample, "lv")
+  
+  neg.ham.df <- left_join(neg.ham.df, neg.ham, by = "distance", all = TRUE)
+  neg.lev.df <- left_join(neg.lev.df, neg.lev, by = "distance", all = TRUE)
+}
+
+# Clean up negative dataframes, add median percent and standard deviation
+neg.ham.df[is.na(neg.ham.df)] <- 0
+neg.ham.df$median <- apply(neg.ham.df[2:ncol(neg.ham.df)], 1, median)
+neg.ham.df$sd <- apply(neg.ham.df[2:ncol(neg.ham.df)], 1, sd)
+
+# Clean up negative dataframes, add median percent and standard deviation
+neg.lev.df[is.na(neg.lev.df)] <- 0
+neg.lev.df$median <- apply(neg.lev.df[2:ncol(neg.lev.df)], 1, median)
+neg.lev.df$sd <- apply(neg.lev.df[2:ncol(neg.lev.df)], 1, sd)
+
+# Create a list of all of the CDR3s from CD154- to be used as a control
+act.CDR3s <- lapply(data.parse[grep("pos",names(data.parse))], function(x){
+  x <- unique(x$CDR3.amino.acid.sequence)
+}) %>% unlist(., use.names = FALSE)
+
+
+# Do the same for all CD154+
+pos.all.ham.df <- data.frame(distance = 0:20)
+pos.all.lev.df <- data.frame(distance = 0:20)
+for(i in 1:100){
+  sample = sample(act.CDR3s, nrow(enriched.CDR3.df))
+  pos.all.ham <- CDR3_dist(sample, method = "hamming")
+  pos.all.lev <- CDR3_dist(sample, method = "lv")
+  
+  pos.all.ham.df <- left_join(pos.all.ham.df, pos.all.ham, by = "distance", all = TRUE) 
+  pos.all.lev.df <- left_join(pos.all.lev.df, pos.all.lev, by = "distance", all = TRUE)
+}
+
+# Clean up negative dataframe, add median percent and standard deviation
+pos.all.ham.df[is.na(pos.all.ham.df)] <- 0
+pos.all.ham.df$median <- apply(pos.all.ham.df[2:ncol(pos.all.ham.df)], 1, median)
+pos.all.ham.df$sd <- apply(pos.all.ham.df[2:ncol(pos.all.ham.df)], 1, sd)
+
+# Clean up negative dataframe, add median percent and standard deviation
+pos.all.lev.df[is.na(pos.all.lev.df)] <- 0
+pos.all.lev.df$median <- apply(pos.all.lev.df[2:ncol(pos.all.lev.df)], 1, median)
+pos.all.lev.df$sd <- apply(pos.all.lev.df[2:ncol(pos.all.lev.df)], 1, sd)
+
+
+sd.ham <- neg.ham.df$sd[as.numeric(as.character(neg.ham.df$distance)) <=15] %>%
+  append(pos.all.ham.df$sd[as.numeric(as.character(pos.all.ham.df$distance)) <=15]) %>%
+  append(rep(NA, 16))
+
+sd.lev <- neg.lev.df$sd[as.numeric(as.character(neg.lev.df$distance)) <=15] %>%
+  append(pos.all.lev.df$sd[as.numeric(as.character(pos.all.lev.df$distance)) <=15]) %>%
+  append(rep(NA, 16))
+
+min.ham <- full_join(min.ham, neg.ham.df, by = "distance") %>%
+  select(c(1, 2, ncol(.) - 1)) %>%
+  full_join(., pos.all.ham.df, by = "distance") %>%
+  select(c(1,3, ncol(.) - 1, 2))
+colnames(min.ham) <- c("distance", "CD154-", "CD154+", "enriched.CD154+")
+
+min.lev <- full_join(min.lev, neg.lev.df, by = "distance") %>%
+  select(c(1, 2, ncol(.) - 1)) %>%
+  full_join(., pos.all.lev.df, by = "distance") %>%
+  select(c(1,3, ncol(.) - 1, 2))
+colnames(min.lev) <- c("distance", "CD154-", "CD154+", "enriched.CD154+")
+
+
+min.ham[is.na(min.ham)] <- 0
+min.ham <- min.ham[!min.ham$distance == "Inf",]
+min.ham <- min.ham[order(min.ham$distance),]
+
+min.ham.melt <- melt(min.ham, id.vars = "distance")
+min.ham.melt$distance <- as.integer(min.ham.melt$distance)
+min.ham.melt <- min.ham.melt[min.ham.melt$distance <=15,] %>%
+  cbind(., sd)
+
+min.lev[is.na(min.lev)] <- 0
+min.lev <- min.lev[!min.lev$distance == "Inf",]
+min.lev <- min.lev[order(min.lev$distance),]
+
+min.lev.melt <- melt(min.lev, id.vars = "distance")
+min.lev.melt$distance <- as.integer(min.lev.melt$distance)
+min.lev.melt <- min.lev.melt[min.lev.melt$distance <=15,] %>%
+  cbind(., sd)
+
+ggplot(min.ham.melt, aes(x = distance, y = value, fill = variable, width = .80)) +
+  geom_bar(stat = "identity", position = position_dodge()) + scale_x_continuous(breaks = c(0:15)) +
+  scale_fill_manual(values = c('#E69F00', "#999999", "#b30000"), labels = c("CD154- T cells", "All CD154+ T cells",
+                                                                            "Peanut Enriched CD154+ cells")) +
+  geom_errorbar(aes(ymin = value, ymax = sd + value), width = .3, position = position_dodge(0.8)) +
+  ylab("percent of total clones") + xlab("AA differences to next closest CDR3") +
+  ggtitle("Hamming distance for peanut CDR3s")
+
+```
+
+Hamming 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
