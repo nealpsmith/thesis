@@ -1,5 +1,7 @@
 library(alakazam)
 library(dplyr)
+library(magrittr)
+library(ggplot2)
 source("tcR_functions.R") #includes several modifications to tcR
 source("neals_tcr_functions.R")
 
@@ -88,4 +90,33 @@ for(i in 1:length(diversity)){
        legend_title="Sample", main_title = paste("diversity:", names(diversity[i])))
   
 }
+dev.off()
+
+# Look at fold-change in diversity from CD154-:CD154+, CD154-:psCDR3, CD154+:psCDR3
+div.fc <- lapply(all.data.by.id, function(x){
+  fold.changes <- list()
+  # Iterate all values of q
+  for( i in 0:2){
+    test <- testDiversity(x, group = "group", clone = "CDR3.amino.acid.sequence",
+                          copy = "Read.count", q = i)
+    df <- data.frame(comp = c("psCDR3toCD154neg", "psCDR3toCD154pos", "CD154negtoCD154pos"),
+                     fold.change = c(test@summary["CD154-",]$MEAN / test@summary["psCDR3",]$MEAN,
+                                     test@summary["all_CD154+",]$MEAN / test@summary["psCDR3",]$MEAN,
+                                     test@summary["CD154-",]$MEAN / test@summary["all_CD154+",]$MEAN))
+    df$q <- i
+    fold.changes[[as.character(i)]] <- df
+  }
+  fold.changes <- do.call(rbind, fold.changes)
+  
+  return(fold.changes)
+}) %>% do.call(rbind, .)
+
+pdf(paste(fig.file.path, "fold.change.at.div.indeces.pdf", sep = "/"), 16, 12)
+ggplot(div.fc, aes(x = comp, y = fold.change)) + geom_boxplot() +
+  scale_y_continuous(limits = c(0, 8)) +
+  facet_wrap(~q, scales = "free_y") +
+  ylab("Fold change") + xlab("") +
+  scale_x_discrete(labels = c("CD154-:CD154+", "CD154-:psCDR3", "CD154+:psCDR3")) +
+  ggtitle("fold change of diversity at different indeces") +
+  theme_bw(base_size = 15)
 dev.off()
