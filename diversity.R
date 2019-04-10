@@ -120,3 +120,30 @@ ggplot(div.fc, aes(x = comp, y = fold.change)) + geom_boxplot() +
   ggtitle("fold change of diversity at different indeces") +
   theme_bw(base_size = 15)
 dev.off()
+
+# Test significance of the differences in distributions (data are not normally distributed)
+# Use wilcox signed-rank test (paired)
+
+# Get rid of two ID's where they had too few psCDR3s
+div.fc <- div.fc[!grepl("19|95", rownames(div.fc)),]
+
+sig.df <- data.frame(q = rep(NA, 9), comp = rep(NA, 9), p.val = rep(NA, 9))
+for (i in 0:2){
+  # Get data for each comparision
+  negpos <- div.fc[div.fc$q == i & div.fc$comp == "CD154negtoCD154pos",]$fold.change
+  negpsCDR3 <- div.fc[div.fc$q == i & div.fc$comp == "psCDR3toCD154neg",]$fold.change
+  pospsCDR3 <- div.fc[div.fc$q == i & div.fc$comp == "psCDR3toCD154pos",]$fold.change
+  
+  # Generate p-values
+  negpos_negpsCDR3 <- wilcox.test(negpos, negpsCDR3, paired = TRUE)$p.value
+
+  negpos_pospsCDR3 <- wilcox.test(negpos, pospsCDR3, paired = TRUE)$p.value
+
+  negpsCDR3_pospsCDR3 <- wilcox.test(negpsCDR3, pospsCDR3, paired = TRUE)$p.value
+  
+  sig.df[(i * 3) + 1,] <- c(i, "negpos_negpsCDR3", negpos_negpsCDR3)
+  sig.df[(i * 3) + 2,] <- c(i, "negpos_pospsCDR3", negpos_pospsCDR3)
+  sig.df[(i * 3) + 3,] <- c(i, "negpsCDR3_pospsCDR3", negpsCDR3_pospsCDR3)
+
+}
+
