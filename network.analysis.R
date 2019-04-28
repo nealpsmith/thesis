@@ -112,12 +112,16 @@ remove(cores); remove(cl)
 
 # Add all of the pairs
 pairs <- rbind(pairs.lev, pairs.disc.4mer, pairs.disc.5mer, pairs.threemers, pairs.fourmers, pairs.fivemers)
+pairs$from.cdr3 <- as.character(pairs$from.cdr3)
+pairs$to.cdr3 <- as.character(pairs$to.cdr3)
+
+# Alphabetically order the pairs (make it easier to eliminate duplicates)
+for(i in 1:nrow(pairs)){
+  pairs[i,] <- sort(pairs[i,])
+}
 
 # Limit to unique edges
 pairs <- unique(pairs)
-# Make the columns character vectors
-pairs$from.cdr3 <- as.character(pairs$from.cdr3)
-pairs$to.cdr3 <- as.character(pairs$to.cdr3)
 
 # Get rid of any self-edges
 pairs <- pairs[!pairs$from.cdr3 == pairs$to.cdr3,]
@@ -475,15 +479,47 @@ dev.off()
 
 ### Want to take clusters and look for any HLA association ###
 # Load HLA data 
-HLA.info <- read.csv(paste(raw.file.path, "HLA.MHCII.alleles.csv", sep = "/"))
+HLA.info <- read.csv("C:/Users/nealp/Dropbox (Partners HealthCare)/Projects/PNOIT2-1037/TCRB sequencing and HLA typing data/HLA.MHCII.alleles.csv")
 
 # Format IDs so they match other
+colnames(HLA.info)[colnames(HLA.info) == "ï..id"] <- "id"
 HLA.info$id[HLA.info$id < 10] <- paste("0", HLA.info$id[HLA.info$id < 10], sep = "")
 HLA.info$id[HLA.info$id == "06"] <- "19"
 
-# Get CDR3s from a dominant cluster
-x <- enriched.CDR3s.df[grep("", enriched.CDR3s.df$CDR3.amino.acid.sequence),] %>%
-  select(c("id", "CDR3.amino.acid.sequence")) %>%
-  left_join(HLA.info, by = "id")
+
+# First, going to look at DRB1
+DRB1.alleles <- unique(c(as.character(HLA.info$DRB1_allele1), as.character(HLA.info$DRB1_allele2))) %>%
+                         sub('\\:.*', "", .) %>% unique()
+DRB1.alleles <- paste("DRB1", DRB1.alleles, sep = "_")
 
 
+pairs.graph <- graph_from_data_frame(pairs)
+pairs.graph <- igraph::as_data_frame(pairs.graph, what = "both")
+
+# Add a column for each possible DRB1 allele
+pairs.graph$vertices[,DRB1.alleles] <- NA
+
+pairs.graph$vertices <- t(apply(pairs.graph$vertices, 1, function(x){
+   # Determine the subjects that have a given CDR3
+   subj <- unique(enriched.CDR3s.df$id[enriched.CDR3s.df$CDR3.amino.acid.sequence == x[["name"]]])
+  
+   # Determine their HLA DRB1 alleles
+   HLA.data <- HLA.info[HLA.info$id %in% subj,]
+  
+   DRB1 <- unique(c(as.character(HLA.data$DRB1_allele1), as.character(HLA.data$DRB1_allele2))) %>%
+     sub('\\:.*', "", .) %>% unique()
+   DRB1 <- paste("DRB1", DRB1, sep = "_")
+  
+  for(i in DRB1){
+    x[[i]] <- 1
+  }
+  return(x)
+}))
+
+pairs.graph$vertices[is.na(pairs.graph$vertices)] <- 0
+# Re-make the graph with the newly added attributes
+pairs.graph <- graph_from_data_frame(pairs.graph$edges,
+                                     directed = F,
+                                     vertices = pairs.graph$vertices)
+
+write_graph(pairs.graph,paste(raw.file.path, "lev.1.with.drb1.gml", sep = "/"), format = "gml")
